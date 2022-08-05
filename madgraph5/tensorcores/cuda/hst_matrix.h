@@ -18,7 +18,7 @@ void cpuMatrixMult(T *h_A, T *h_B, T *cpu_C, int n) {
     for (int col=0; col< n; col++){
       sum = 0.;
       for (int i=0; i<n; i++){
-        sum += (*h_A)[row*n+i]*(*h_B)[n*n+col];
+        sum += (*h_A)[row*n+i]*(*h_B)[i*n+col];
       }
       (*cpu_C)[row*n+col] = sum;
     }
