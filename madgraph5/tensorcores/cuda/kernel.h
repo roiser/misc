@@ -1,44 +1,42 @@
 #ifndef KERNEL_CUH_
 #define KERNEL_CUH_
 
-#include <math.h>
-#include <iostream>
 #include "cuda_runtime.h"
 #include "kernel.h"
+#include <iostream>
+#include <math.h>
 #include <stdlib.h>
 
-template<typename T>
+template <typename T>
 __global__ void matrixMultiplicationKernel(T *A, T *B, T *C, int N) {
 
-    int ROW = blockIdx.y*blockDim.y+threadIdx.y;
-    int COL = blockIdx.x*blockDim.x+threadIdx.x;
+  int ROW = blockIdx.y * blockDim.y + threadIdx.y;
+  int COL = blockIdx.x * blockDim.x + threadIdx.x;
 
-    float tmpSum = 0;
+  float tmpSum = 0;
 
-    if (ROW < N && COL < N) {
-        // each thread computes one element of the block sub-matrix
-        for (int i = 0; i < N; i++) {
-            tmpSum += A[ROW * N + i] * B[i * N + COL];
-        }
+  if (ROW < N && COL < N) {
+    // each thread computes one element of the block sub-matrix
+    for (int i = 0; i < N; i++) {
+      tmpSum += A[ROW * N + i] * B[i * N + COL];
     }
-    C[ROW * N + COL] = tmpSum;
+  }
+  C[ROW * N + COL] = tmpSum;
 }
 
-
-template<typename T>
-void matrixMultiplication(T *A, T *B, T *C, int N) {
+template <typename T> void matrixMultiplication(T *A, T *B, T *C, int N) {
   // declare the number of blocks per grid and the number of threads per block
   // use 1 to 512 threads per block
   dim3 threadsPerBlock(N, N);
   dim3 blocksPerGrid(1, 1);
-      if (N*N > 512){
-          threadsPerBlock.x = 512;
-          threadsPerBlock.y = 512;
-          blocksPerGrid.x = ceil(double(N)/double(threadsPerBlock.x));
-          blocksPerGrid.y = ceil(double(N)/double(threadsPerBlock.y));
-      }
+  if (N * N > 512) {
+    threadsPerBlock.x = 512;
+    threadsPerBlock.y = 512;
+    blocksPerGrid.x = ceil(double(N) / double(threadsPerBlock.x));
+    blocksPerGrid.y = ceil(double(N) / double(threadsPerBlock.y));
+  }
 
-  matrixMultiplicationKernel<<<blocksPerGrid,threadsPerBlock>>>(A, B, C, N);
+  matrixMultiplicationKernel<<<blocksPerGrid, threadsPerBlock>>>(A, B, C, N);
 }
 
 #endif
