@@ -1,33 +1,33 @@
 #include <math.h>
 
-template <typename T> void matrixInitialize(T *m1, T *m2, int n) {
+template <typename T> void matrixInitialize(T *A, T *B, int N) {
   // Initialize matrices on the host
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n; j++) {
-      (*m1)[i * n + j] = sin(i);
-      (*m2)[i * n + j] = cos(j);
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < N; j++) {
+      (*A)[i * N + j] = sin(i);
+      (*B)[i * N + j] = cos(j);
     }
   }
 }
 
-template <typename T> void cpuMatrixMult(T *h_A, T *h_B, T *cpu_C, int n) {
+template <typename T> void cpuMatrixMult(T *A, T *B, T *C, int N) {
   double sum;
-  for (int row = 0; row < n; row++) {
-    for (int col = 0; col < n; col++) {
+  for (int row = 0; row < N; row++) {
+    for (int col = 0; col < N; col++) {
       sum = 0.;
-      for (int i = 0; i < n; i++) {
-        sum += (*h_A)[row * n + i] * (*h_B)[i * n + col];
+      for (int i = 0; i < N; i++) {
+        sum += (*A)[row * N + i] * (*B)[i * N + col];
       }
-      (*cpu_C)[row * n + col] = sum;
+      (*C)[row * N + col] = sum;
     }
   }
 }
 
-template <typename T> double errorCheck(T *cpu_C, T *h_C, int n) {
+template <typename T> double errorCheck(T *hC, T *dC, int n) {
   double err = 0.;
   for (int ROW = 0; ROW < n; ROW++) {
     for (int COL = 0; COL < n; COL++) {
-      err += (*cpu_C)[ROW * n + COL] - (*h_C)[ROW * n + COL];
+      err += (*hC)[ROW * n + COL] - (*dC)[ROW * n + COL];
     }
   }
   return err;

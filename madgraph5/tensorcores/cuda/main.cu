@@ -10,12 +10,12 @@
 #include "hst_matrix.h"
 #include "kernel.h"
 
-#define MTYPE float
+#define MTYPE double
 
 int main() {
   // Perform matrix multiplication C = A*B
   // where A, B and C are NxN matrices
-  int N = 16;
+  int N = 8;
   int SIZE = N * N;
 
   // Allocate memory on the host
