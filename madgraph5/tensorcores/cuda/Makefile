@@ -12,14 +12,14 @@ CFLAGS = $(ARCH)
 
 all: $(EXEC)
 
-debug: CFLAGS += -g -G
+debug: CFLAGS += -g -G -DDEBUG
 debug: all
 
 profile: CFLAGS += -pg
 profile: debug
 
 $(EXEC): $(SRC) $(HEADERS)
-	$(NVCC) $(ARCH) -I . -o $@ $<
+	$(NVCC) $(CFLAGS) -I . -o $@ $<
 
 clean:
 	rm -f $(EXEC)
