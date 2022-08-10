@@ -1,3 +1,4 @@
+#include <limits>
 #include <math.h>
 
 template <typename T> void matrixInitialize(T *A, T *B, int N) {
@@ -8,6 +9,20 @@ template <typename T> void matrixInitialize(T *A, T *B, int N) {
       (*B)[i * N + j] = cos(j);
     }
   }
+}
+
+template <typename T> void printMatrix(const std::string &s, T *m, int N) {
+#ifdef DEBUG
+  std::cout << s << std::endl;
+  std::cout.precision(std::numeric_limits<double>::max_digits10);
+  for (int i = 0; i < N; ++i) {
+    for (int j = 0; j < N; ++j) {
+      std::cout << (*m)[i * N + j] << " ";
+    }
+    std::cout << std::endl;
+  }
+  std::cout << std::endl;
+#endif
 }
 
 template <typename T> void cpuMatrixMult(T *A, T *B, T *C, int N) {
