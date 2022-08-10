@@ -2,11 +2,14 @@
 #include <math.h>
 
 template <typename T> void matrixInitialize(T *A, T *B, int N) {
+  srand(time(NULL));
+  int X = 100;
+  double div = static_cast<double>(RAND_MAX / X);
   // Initialize matrices on the host
   for (int i = 0; i < N; i++) {
     for (int j = 0; j < N; j++) {
-      (*A)[i * N + j] = sin(i);
-      (*B)[i * N + j] = cos(j);
+      (*A)[i * N + j] = static_cast<double>(rand()) / div;
+      (*B)[i * N + j] = static_cast<double>(rand()) / div;
     }
   }
 }
