@@ -2,7 +2,7 @@
 #include <math.h>
 
 template <typename T> void matrixInitialize(T *A, T *B, int N) {
-  srand(time(NULL));
+  srand(1);
   int X = 100;
   double div = static_cast<double>(RAND_MAX / X);
   // Initialize matrices on the host

@@ -59,7 +59,6 @@ __global__ void matrixMultiplicationKernelTensor(T *A, T *B, T *C,
   wmma::fragment<wmma::matrix_b, 8, 8, 4, double, wmma::row_major> b_frag;
   wmma::fragment<wmma::accumulator, 8, 8, 4, double> acc_frag;
   // wmma::fragment<wmma::accumulator, 8, 8, 4, double> c_frag;
-
   wmma::fill_fragment(acc_frag, 0.0f);
 
   wmma::load_matrix_sync(a_frag, A, 8);
@@ -82,6 +81,9 @@ void matrixMultiplicationTensor(T *A, T *B, T *C, const int N) {
     blocksPerGrid.x = ceil(double(N) / double(32));
     blocksPerGrid.y = ceil(double(N) / double(32));
   }
+
+  printf("%d, %d, %d, %d\n", threadsPerBlock.x, threadsPerBlock.y,
+         blocksPerGrid.x, blocksPerGrid.y);
 
   // matrixMultiplicationKernelTensor<<<1, 1>>>(A, B, C, N);
   matrixMultiplicationKernelTensor<<<blocksPerGrid, threadsPerBlock>>>(A, B, C,
