@@ -21,5 +21,8 @@ profile: debug
 $(EXEC): $(SRC) $(HEADERS)
 	$(NVCC) $(CFLAGS) -I . -o $@ $<
 
+test: test.cu
+	$(NVCC) $(CFLAGS) -o $@ $<
+
 clean:
-	rm -f $(EXEC)
+	rm -f $(EXEC) test
