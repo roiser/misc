@@ -1,16 +1,12 @@
 CUDA_ARCH = 80
-EXEC = main
-NVCC = nvcc
+ARCH = -arch sm_$(CUDA_ARCH)
 
-SRC = main.cu
 HEADERS = dev_array.h hst_matrix.h kernel.h
 
-ARCH = -arch sm_$(CUDA_ARCH)
-CFLAGS = $(ARCH)
+NVCC = nvcc
+CFLAGS = $(ARCH) -I .
 
-# nvcc -arch sm_80 -I /p/home/jusers/roiser1/juwels/usr/local/include ampere_tf32_tensorop_gemm.cu
-
-all: $(EXEC)
+all: main test
 
 debug: CFLAGS += -g -G -DDEBUG
 debug: all
@@ -18,11 +14,10 @@ debug: all
 profile: CFLAGS += -pg
 profile: debug
 
-$(EXEC): $(SRC) $(HEADERS)
-	$(NVCC) $(CFLAGS) -I . -o $@ $<
-
-test: test.cu
+%: %.cu $(HEADERS)
 	$(NVCC) $(CFLAGS) -o $@ $<
 
 clean:
-	rm -f $(EXEC) test
+	rm -f main test
+
+# nvcc -arch sm_80 -I /p/home/jusers/roiser1/juwels/usr/local/include ampere_tf32_tensorop_gemm.cu
