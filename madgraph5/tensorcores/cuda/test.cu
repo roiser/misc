@@ -8,63 +8,71 @@
 
 using namespace nvcuda;
 
-__global__ void mult(const double *A, const double *B, double *C, int N) {
+constexpr int M = 8, N = 8, K = 4;
 
-  printf("kernel start\n");
+__global__ void mult(const double *A, const double *B, double *C) {
 
-  wmma::fragment<wmma::matrix_a, 8, 8, 4, double, wmma::row_major> a_frag;
-  wmma::fragment<wmma::matrix_b, 8, 8, 4, double, wmma::row_major> b_frag;
-  wmma::fragment<wmma::accumulator, 8, 8, 4, double> acc_frag;
+  // printf("kernel start\n");
 
-  wmma::load_matrix_sync(a_frag, A, 8);
-  wmma::load_matrix_sync(b_frag, B, 8);
-  wmma::fill_fragment(acc_frag, 0.);
+  wmma::fragment<wmma::matrix_a, M, N, K, double, wmma::row_major> a_frag;
+  wmma::fragment<wmma::matrix_b, M, N, K, double, wmma::row_major> b_frag;
+  wmma::fragment<wmma::accumulator, M, N, K, double> c_frag;
 
-  wmma::mma_sync(acc_frag, a_frag, b_frag, acc_frag);
+  wmma::load_matrix_sync(a_frag, A, K);
+  wmma::load_matrix_sync(b_frag, B, M);
+  wmma::fill_fragment(c_frag, 0.);
 
-  wmma::store_matrix_sync(C, acc_frag, N, wmma::mem_row_major);
+  wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
 
-  printf("kernel stop\n");
+  wmma::store_matrix_sync(C, c_frag, N, wmma::mem_row_major);
+
+  // printf("kernel stop\n");
 }
 
 int main() {
 
   std::cout << "start" << std::endl;
 
-  int N = 8;
-  int SIZE = N * N;
+  const int SA = M * K, SB = K * N, SC = M * N;
 
-  double A[SIZE] = {1., 2., 3., 4., 5., 6., 7., 8., 1., 2., 3., 4., 5.,
-                    6., 7., 8., 1., 2., 3., 4., 5., 6., 7., 8., 1., 2.,
-                    3., 4., 5., 6., 7., 8., 1., 2., 3., 4., 5., 6., 7.,
-                    8., 1., 2., 3., 4., 5., 6., 7., 8., 1., 2., 3., 4.,
-                    5., 6., 7., 8., 1., 2., 3., 4., 5., 6., 7., 8.};
-  double B[SIZE] = {8., 7., 6., 5., 4., 3., 2., 1., 8., 7., 6., 5., 4.,
-                    3., 2., 1., 8., 7., 6., 5., 4., 3., 2., 1., 8., 7.,
-                    6., 5., 4., 3., 2., 1., 8., 7., 6., 5., 4., 3., 2.,
-                    1., 8., 7., 6., 5., 4., 3., 2., 1., 8., 7., 6., 5.,
-                    4., 3., 2., 1., 8., 7., 6., 5., 4., 3., 2., 1.};
-  double C[SIZE] = {0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-                    0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-                    0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-                    0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-                    0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.};
+  // clang-format off
+  double A[SA] = {1., 2., 3., 4.,
+                  1., 2., 3., 4.,
+                  1., 2., 3., 4.,
+                  1., 2., 3., 4.,
+                  1., 2., 3., 4.,
+                  1., 2., 3., 4.,
+                  1., 2., 3., 4.,
+                  1., 2., 3., 4.};
+  double B[SB] = {8., 7., 6., 5., 4., 3., 2., 1.,
+                  8., 7., 6., 5., 4., 3., 2., 1.,
+                  8., 7., 6., 5., 4., 3., 2., 1.,
+                  8., 7., 6., 5., 4., 3., 2., 1.};
+  double C[SC] = {0., 0., 0., 0., 0., 0., 0., 0.,
+                  0., 0., 0., 0., 0., 0., 0., 0.,
+                  0., 0., 0., 0., 0., 0., 0., 0.,
+                  0., 0., 0., 0., 0., 0., 0., 0.,
+                  0., 0., 0., 0., 0., 0., 0., 0.,
+                  0., 0., 0., 0., 0., 0., 0., 0.,
+                  0., 0., 0., 0., 0., 0., 0., 0.,
+                  0., 0., 0., 0., 0., 0., 0., 0.};
+// clang-format once
 
-  dev_array<double> d_A(SIZE);
-  dev_array<double> d_B(SIZE);
-  dev_array<double> d_C(SIZE);
+  dev_array<double> d_A(SA);
+  dev_array<double> d_B(SB);
+  dev_array<double> d_C(SC);
 
-  d_A.set(&A[0], SIZE);
-  d_B.set(&B[0], SIZE);
+  d_A.set(A, SA);
+  d_B.set(B, SB);
 
-  mult<<<1, 1>>>(d_A.getData(), d_B.getData(), d_C.getData(), N);
+  mult<<<1, 32>>>(d_A.getData(), d_B.getData(), d_C.getData());
   cudaDeviceSynchronize();
-  d_C.get(&C[0], SIZE);
+  d_C.get(C, SC);
   cudaDeviceSynchronize();
 
-  for (int i = 0; i < N; ++i) {
+  for (int i = 0; i < M; ++i) {
     for (int j = 0; j < N; ++j) {
-      std::cout << C[i * N + j] << ", ";
+      std::cout << C[i * M + j] << ", ";
     }
     std::cout << std::endl;
   }
