@@ -15,11 +15,12 @@ __global__ void mult(const double *A, const double *B, double *C) {
   // printf("kernel start\n");
 
   wmma::fragment<wmma::matrix_a, M, N, K, double, wmma::row_major> a_frag;
-  wmma::fragment<wmma::matrix_b, M, N, K, double, wmma::row_major> b_frag;
+  // row_major or col_major
+  wmma::fragment<wmma::matrix_b, M, N, K, double, wmma::col_major> b_frag;
   wmma::fragment<wmma::accumulator, M, N, K, double> c_frag;
 
   wmma::load_matrix_sync(a_frag, A, K);
-  wmma::load_matrix_sync(b_frag, B, M);
+  wmma::load_matrix_sync(b_frag, B, K); // row-major: M, col-major: K
   wmma::fill_fragment(c_frag, 0.);
 
   wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
@@ -44,10 +45,20 @@ int main() {
                   1., 2., 3., 4.,
                   1., 2., 3., 4.,
                   1., 2., 3., 4.};
-  double B[SB] = {8., 7., 6., 5., 4., 3., 2., 1.,
-                  8., 7., 6., 5., 4., 3., 2., 1.,
-                  8., 7., 6., 5., 4., 3., 2., 1.,
-                  8., 7., 6., 5., 4., 3., 2., 1.};
+  // row-major
+  // double B[SB] = {8., 7., 6., 5., 4., 3., 2., 1.,
+  //                 8., 7., 6., 5., 4., 3., 2., 1.,
+  //                 8., 7., 6., 5., 4., 3., 2., 1.,
+  //                 8., 7., 6., 5., 4., 3., 2., 1.};
+  // col-major
+  double B[SB] = {8., 8., 8., 8.,
+                  7., 7., 7., 7.,
+                  6., 6., 6., 6.,
+                  5., 5., 5., 5.,
+                  4., 4., 4., 4.,
+                  3., 3., 3., 3.,
+                  2., 2., 2., 2.,
+                  1., 1., 1., 1.};
   double C[SC] = {0., 0., 0., 0., 0., 0., 0., 0.,
                   0., 0., 0., 0., 0., 0., 0., 0.,
                   0., 0., 0., 0., 0., 0., 0., 0.,
