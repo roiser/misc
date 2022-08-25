@@ -33,8 +33,7 @@ constexpr int M = 8, N = 8, K = 4;
 
 __global__ void mult(const double *A, const double *B, double *C) {
   wmma::fragment<wmma::matrix_a, M, N, K, double, wmma::row_major> a_frag;
-  wmma::fragment<wmma::matrix_b, M, N, K, double, __BRM_mjr__>
-      b_frag; // row/col
+  wmma::fragment<wmma::matrix_b, M, N, K, double, __BRM_mjr__> b_frag;
   wmma::fragment<wmma::accumulator, M, N, K, double> c_frag;
 
   wmma::load_matrix_sync(a_frag, A, K);
