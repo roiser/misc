@@ -6,6 +6,12 @@
 #include <mma.h>
 #include <stdlib.h>
 
+/*
+pointers
+https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#wmma
+https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html
+*/
+
 using namespace nvcuda;
 
 constexpr int M = 8, N = 8, K = 4;
