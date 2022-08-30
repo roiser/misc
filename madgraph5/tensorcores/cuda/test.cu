@@ -5,7 +5,8 @@
 #include <mma.h>
 #include <stdlib.h>
 
-// #define B_is_row_major
+#define A_is_row_major
+#define B_is_row_major
 
 #ifdef B_is_row_major
 #define __B_mjr__ wmma::row_major // wmma name
@@ -21,10 +22,25 @@
 #define __B_idx__ i
 #endif
 
+#ifdef A_is_row_major
+#define __A_mjr__ wmma::col_major
+#define __A_cdm__ M
+#define __A_rdm__ K
+#define __A_mat__ A_cm
+#define __A_idx__ i
+#else
+#define __A_mjr__ wmma::row_major // wmma name
+#define __A_cdm__ K               // column dimension
+#define __A_rdm__ M               // row dimension
+#define __A_mat__ A_rm            // matrix name
+#define __A_idx__ j               // index var for fill
+#endif
+
 /*
-pointers
+Docu
 https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#wmma
 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html
+Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
 
 using namespace nvcuda;
@@ -32,11 +48,11 @@ using namespace nvcuda;
 constexpr int M = 8, N = 8, K = 4;
 
 __global__ void mult(const double *A, const double *B, double *C) {
-  wmma::fragment<wmma::matrix_a, M, N, K, double, wmma::row_major> a_frag;
+  wmma::fragment<wmma::matrix_a, M, N, K, double, __A_mjr__> a_frag;
   wmma::fragment<wmma::matrix_b, M, N, K, double, __B_mjr__> b_frag;
   wmma::fragment<wmma::accumulator, M, N, K, double> c_frag;
 
-  wmma::load_matrix_sync(a_frag, A, K);
+  wmma::load_matrix_sync(a_frag, A, __A_cdm__);
   wmma::load_matrix_sync(b_frag, B, __B_cdm__); // row-major: M, col-major: K
   wmma::fill_fragment(c_frag, 0.);
 
@@ -46,9 +62,9 @@ __global__ void mult(const double *A, const double *B, double *C) {
 }
 
 void fill(double A[], double B[], double C[]) {
-  for (int i = 0; i < M; ++i)
-    for (int j = 0; j < K; ++j)
-      A[i * K + j] = j + 1;
+  for (int i = 0; i < __A_rdm__; ++i)
+    for (int j = 0; j < __A_cdm__; ++j)
+      A[i * __A_cdm__ + j] = __A_idx__ + 1;
 
   for (int i = 0; i < __B_rdm__; ++i)
     for (int j = 0; j < __B_cdm__; ++j)
@@ -62,9 +78,9 @@ void fill(double A[], double B[], double C[]) {
 void print(double A[], double B[], double C[]) {
 
   std::cout << "Matrix A" << std::endl;
-  for (int i = 0; i < M; ++i) {
-    for (int j = 0; j < K; ++j) {
-      std::cout << A[i * K + j] << ", ";
+  for (int i = 0; i < __A_rdm__; ++i) {
+    for (int j = 0; j < __A_cdm__; ++j) {
+      std::cout << A[i * __A_cdm__ + j] << ", ";
     }
     std::cout << std::endl;
   }
@@ -91,12 +107,12 @@ void print(double A[], double B[], double C[]) {
 
 int main() {
   const int SA = M * K, SB = K * N, SC = M * N;
-  double A_rm[SA], __B_mat__[SB], C_rm[SC];
+  double __A_mat__[SA], __B_mat__[SB], C_rm[SC];
   dev_array<double> d_A(SA), d_B(SB), d_C(SC);
 
-  fill(A_rm, __B_mat__, C_rm);
+  fill(__A_mat__, __B_mat__, C_rm);
 
-  d_A.set(A_rm, SA);
+  d_A.set(__A_mat__, SA);
   d_B.set(__B_mat__, SB);
 
   mult<<<1, 32>>>(d_A.getData(), d_B.getData(), d_C.getData());
@@ -104,7 +120,7 @@ int main() {
   d_C.get(C_rm, SC);
   cudaDeviceSynchronize();
 
-  print(A_rm, __B_mat__, C_rm);
+  print(__A_mat__, __B_mat__, C_rm);
 
   return 0;
 }
