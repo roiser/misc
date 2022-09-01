@@ -34,11 +34,16 @@ dim = 24
 stride = 8
 step = int(dim / stride)
 
+printscreen = True
+
 for k in range(step):
     for c in range(0, dim):
         for r in range(k * stride, (k + 1) * stride):
             sys.stdout.write(str(cf[r][c]) + ', ')
-            # sys.stdout.write(str(cf[i][j]) + '(' + str(i) + '/' + str(j) + '), ')  # noqa
-        sys.stdout.write("\n")
-        if (c + 1) % stride == 0:
+        if printscreen:
             sys.stdout.write("\n")
+            if (c + 1) % stride == 0:
+                sys.stdout.write("\n")
+        else:
+            if (c + 1) % step == 0:
+                sys.stdout.write("\n")
