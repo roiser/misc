@@ -53,34 +53,43 @@ void fill2(double B[], double C[], const int m, const int n, const int k) {
 */
 
 void print(double A[], double B[], double C[], const int a_rdm, const int a_cdm,
-           const int b_rdm, const int b_cdm, const int m, const int n, int k) {
+           const int b_rdm, const int b_cdm, const int m, const int n, int k,
+           int stride = 0) {
 
-  std::cout << "Matrix A" << std::endl;
+  using namespace std;
+
+  cout << "Matrix A (rows: " << a_rdm << ", cols: " << a_cdm << ")" << endl;
   for (int i = 0; i < a_rdm; ++i) {
     for (int j = 0; j < a_cdm; ++j) {
-      std::cout << A[i * a_cdm + j] << ", ";
+      cout << A[i * a_cdm + j] << ", ";
+      if (stride && (j + 1) % stride == 0)
+        cout << endl;
     }
-    std::cout << std::endl;
+    if (!stride)
+      cout << endl;
   }
-  std::cout << std::endl;
+  cout << endl;
 
-  std::cout << "Matrix B" << std::endl;
+  cout << "Matrix B (rows: " << b_rdm << ", cols: " << b_cdm << ")" << endl;
   for (int i = 0; i < b_rdm; ++i) {
     for (int j = 0; j < b_cdm; ++j) {
-      std::cout << B[i * b_cdm + j] << ", ";
+      cout << B[i * b_cdm + j] << ", ";
     }
-    std::cout << std::endl;
+    cout << endl;
   }
-  std::cout << std::endl;
+  cout << endl;
 
-  std::cout << "Matrix C" << std::endl;
+  cout << "Matrix C(rows: " << m << ", cols: " << n << ")" << endl;
   for (int i = 0; i < m; ++i) {
     for (int j = 0; j < n; ++j) {
-      std::cout << C[i * n + j] << ", ";
+      cout << C[i * n + j] << ", ";
+      if (stride && (j + 1) % stride == 0)
+        cout << endl;
     }
-    std::cout << std::endl;
+    if (!stride)
+      cout << endl;
   }
-  std::cout << std::endl;
+  cout << endl;
 }
 
 #endif // hst_matrix_h
