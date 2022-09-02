@@ -25,7 +25,7 @@ __global__ void mult(const double *A, const double *B, double *C) {
 }
 
 template <int M, int N, int K>
-__global__ void mult2(const double *A, const double *B, double *C) {
+__device__ void mult2(const double *A, const double *B, double *C) {
   wmma::fragment<wmma::matrix_a, M, N, K, double, _A_mjr_> a_frag;
   wmma::fragment<wmma::matrix_b, M, N, K, double, _B_mjr_> b_frag;
   wmma::fragment<wmma::accumulator, M, N, K, double> c_frag;
@@ -37,6 +37,14 @@ __global__ void mult2(const double *A, const double *B, double *C) {
   wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
 
   wmma::store_matrix_sync(C, c_frag, N, wmma::mem_row_major);
+}
+
+template <int M, int N, int K>
+__global__ void mmult(const double *A, const double *B, double *C) {
+
+  const int m = 8, n = 8, k = 4;
+
+  mult2<m, n, k>(A, B, C);
 }
 
 #endif // kernel_h

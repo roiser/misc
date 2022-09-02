@@ -20,8 +20,40 @@ void fill(double A[], double B[], double C[], const int a_rdm, const int a_cdm,
       C[i * n + j] = 0;
 }
 
+void fill2(double A[], double B[], double C[], const int m, const int n,
+           const int k) {
+  // fill A
+  size_t arrlgth = 8 * sizeof(double);
+  for (int i = 0; i < k / 8; ++i) {
+    memcpy(&A[i * 16], &jamp0r[i * 8], arrlgth);
+    memcpy(&A[i * 16 + 8], &jamp0i[i * 8], arrlgth);
+  }
+
+  // fill B
+  memcpy(&B[0], &cf[0], k * n * sizeof(double));
+
+  // fill C
+  for (int i = 0; i < m; ++i)
+    for (int j = 0; j < n; ++j)
+      C[i * n + j] = 0;
+}
+
+/*
+void fill2(double B[], double C[], const int m, const int n, const int k) {
+  // fill B
+  size_t arrlgth = k * sizeof(double);
+  memcpy(&(B[0]), &jamp0r[0], arrlgth);
+  memcpy(&B[k], &jamp0i[0], arrlgth);
+
+  // fill C
+  for (int i = 0; i < m; ++i)
+    for (int j = 0; j < n; ++j)
+      C[i * n + j] = 0;
+}
+*/
+
 void print(double A[], double B[], double C[], const int a_rdm, const int a_cdm,
-           const int b_rdm, const int b_cdm, const int m, const int n) {
+           const int b_rdm, const int b_cdm, const int m, const int n, int k) {
 
   std::cout << "Matrix A" << std::endl;
   for (int i = 0; i < a_rdm; ++i) {
