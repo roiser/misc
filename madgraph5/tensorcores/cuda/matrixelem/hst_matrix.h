@@ -9,11 +9,11 @@ void fill(double A[], double B[], double C[], const int a_rdm, const int a_cdm,
           const int b_rdm, const int b_cdm, const int m, const int n) {
   for (int i = 0; i < a_rdm; ++i)
     for (int j = 0; j < a_cdm; ++j)
-      A[i * a_cdm + j] = __A_idx__ + 1;
+      A[i * a_cdm + j] = _A_idx_ + 1;
 
   for (int i = 0; i < b_rdm; ++i)
     for (int j = 0; j < b_cdm; ++j)
-      B[i * b_cdm + j] = __B_idx__ + 1;
+      B[i * b_cdm + j] = _B_idx_ + 1;
 
   for (int i = 0; i < m; ++i)
     for (int j = 0; j < n; ++j)
