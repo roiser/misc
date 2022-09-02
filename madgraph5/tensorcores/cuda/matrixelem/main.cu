@@ -10,21 +10,23 @@ Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
 
 int main() {
-  const int SA = M * K, SB = K * N, SC = M * N;
+  const int M = 8, N = 8, K = 4, SA = M * K, SB = K * N, SC = M * N;
   double __A_mat__[SA], __B_mat__[SB], C_rm[SC];
   dev_array<double> d_A(SA), d_B(SB), d_C(SC);
 
-  fill(__A_mat__, __B_mat__, C_rm);
+  fill(__A_mat__, __B_mat__, C_rm, __A_rdm__, __A_cdm__, __B_rdm__, __B_cdm__,
+       M, N);
 
   d_A.set(__A_mat__, SA);
   d_B.set(__B_mat__, SB);
 
-  mult<<<1, 32>>>(d_A.getData(), d_B.getData(), d_C.getData());
+  mult<M, N, K><<<1, 32>>>(d_A.getData(), d_B.getData(), d_C.getData());
   cudaDeviceSynchronize();
   d_C.get(C_rm, SC);
   cudaDeviceSynchronize();
 
-  print(__A_mat__, __B_mat__, C_rm);
+  print(__A_mat__, __B_mat__, C_rm, __A_rdm__, __A_cdm__, __B_rdm__, __B_cdm__,
+        M, N);
 
   return 0;
 }

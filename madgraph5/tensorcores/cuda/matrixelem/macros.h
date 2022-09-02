@@ -1,8 +1,6 @@
 #ifndef macros_h
 #define macros_h
 
-#include "mnk.h"
-
 #define A_is_row_major
 #define B_is_row_major
 

@@ -9,6 +9,7 @@
 
 using namespace nvcuda;
 
+template <int M, int N, int K>
 __global__ void mult(const double *A, const double *B, double *C) {
   wmma::fragment<wmma::matrix_a, M, N, K, double, __A_mjr__> a_frag;
   wmma::fragment<wmma::matrix_b, M, N, K, double, __B_mjr__> b_frag;
