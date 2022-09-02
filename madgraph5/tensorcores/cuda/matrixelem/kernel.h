@@ -16,7 +16,7 @@ __global__ void mult(const double *A, const double *B, double *C) {
   wmma::fragment<wmma::accumulator, M, N, K, double> c_frag;
 
   wmma::load_matrix_sync(a_frag, A, __A_cdm__);
-  wmma::load_matrix_sync(b_frag, B, __B_cdm__); // row-major: M, col-major: K
+  wmma::load_matrix_sync(b_frag, B, __B_cdm__);
   wmma::fill_fragment(c_frag, 0.);
 
   wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
