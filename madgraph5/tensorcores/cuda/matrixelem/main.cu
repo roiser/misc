@@ -2,7 +2,7 @@
 #include "hst_matrix.h"
 #include "kernel.h"
 
-//#define MG5EXAMPLE
+#define MG5EXAMPLE
 
 /*
 Docu
