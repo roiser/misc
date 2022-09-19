@@ -156,8 +156,8 @@ class TensorecoreMockup():
         jampr = [x.real for x in jamp]
         jampi = [x.imag for x in jamp]
 
-        ztempr = np.matmul(cf, jampr)
-        ztempi = np.matmul(cf, jampi)
+        ztempr = np.matmul(jampr, cf)
+        ztempi = np.matmul(jampi, cf)
 
         ztemp_cx = ztempr + 1j * ztempi
         jamps_cx_con = np.array(jampr) / 54 + -1j * np.array(jampi) / 54
@@ -245,11 +245,11 @@ class TensorecoreMockup():
             jampri = [[x.real for x in jamps], [x.imag for x in jamps]]
             jampri = [np.array_split(x, 3) for x in jampri]
             print('*' * 80)
-            self.calculate(jamps)
+            res = self.calculate(jamps)
             self.calculate2(jamps)
             self.calculate3(jamps)
             self.calculate4(jamps)
-            res = self.calculate5(jampri)
+            self.calculate5(jampri)
             if deltaME == res:
                 print('success')
             else:
