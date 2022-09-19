@@ -14,7 +14,7 @@ Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 
 int main() {
 
-#if defied(MG5EXAMPLE)
+#if defined(MG5EXAMPLE)
   const int dim = 24;
   const int M = 2, K = dim, N = dim, SA = M * K, SB = K * N, SC = M * N;
   double _A_mat_[SA], _B_mat_[SB], C_rm[SC];
