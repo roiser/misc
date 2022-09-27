@@ -41,10 +41,14 @@ int main() {
 
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
 
+
+  //
+  // first multiplication
+  //
   cublasHandle_t handle;
-  cudaError_t cuerror;
+  cudaError_t cuda_error;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
-  cublasFillMode_t uplo = CUBLAS_FILL_MODE_UPPER;
+  cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
   int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24,
 //      asize = cfmat_sym * sizeof(double),
       asize = cfmat * sizeof(double),
@@ -54,31 +58,72 @@ int main() {
     *h_B = (double *)malloc(bsize),
     *d_A, *d_B;
   double *h_C = (double *)malloc(bsize), *d_C;
+  cublasStatus_t cublas_error;
 
   cublasCreate(&handle);
+
+  // for (int i = 0; i < 24; ++i) {
+  //   for (int j = 0; j < 24; ++j) {
+  //     if (i != j) cf[i*24 + j] = 0;
+  //   }
+  // }
+
 
   memcpy((void*)h_A, &cf[0], asize);
   memcpy((void*)h_B, &jamp0r[0], bsize);
 
-  cuerror = cudaMalloc((void**) &d_A, asize);
-  cuerror = cudaMalloc((void**) &d_B, bsize);
-  cuerror = cudaMalloc((void**) &d_C, bsize);
+  cuda_error = cudaMalloc((void**) &d_A, asize);
+  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
 
-  cuerror = cudaMemcpy((void*)d_A, h_A, asize, cudaMemcpyHostToDevice);
-  cuerror = cudaMemcpy((void*)d_B, h_B, bsize, cudaMemcpyHostToDevice);
+  cuda_error = cudaMalloc((void**) &d_B, bsize);
+  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
 
-  cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
+  cuda_error = cudaMalloc((void**) &d_C, bsize);
+  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
 
-  cuerror = cudaMemcpy(h_C, d_C, bsize, cudaMemcpyDeviceToHost);
+  cuda_error = cudaMemcpy((void*)d_A, h_A, asize, cudaMemcpyHostToDevice);
+  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
+
+  cuda_error = cudaMemcpy((void*)d_B, h_B, bsize, cudaMemcpyHostToDevice);
+  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
+
+  for (int i = 0; i < 24; ++i) {
+    for (int j = 0; j < 24; ++j) {
+      std::cout <<  cf[i*24 + j] << " ";
+    }
+    std::cout << std::endl;
+  }
+
+
+  cublas_error = cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
+  if (cublas_error) std::cout << "cublas error code: " << cublas_error << std::endl;
+
+  // cublasStatus_t cublasDgemv(cublasHandle_t handle, cublasOperation_t trans,
+  //                            int m, int n,
+  //                            const double          *alpha,
+  //                            const double          *A, int lda,
+  //                            const double          *x, int incx,
+  //                            const double          *beta,
+  //                            double          *y, int incy)
+  // 
+  // cublasOperation_t trans = CUBLAS_OP_N;
+  // int n2 = 24, incx = 1;
+  // cublas_error = cublasDgemv(handle, trans, m, n2, &alpha, d_A, lda, d_B, incx, &beta, d_C, incx);
+  // if (cublas_error) std::cout << "cublas error code: " << cublas_error << std::endl;
+
+  cuda_error = cudaMemcpy(h_C, d_C, bsize, cudaMemcpyDeviceToHost);
+  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
 
   cublasDestroy(handle);
 
-  // std::cout << "error code: " << cuerror << std::endl;
+  if (cuda_error) std::cout << "error code: " << cuda_error << std::endl;
 
   for (int i = 0; i < medim; ++i) std::cout << h_C[i] << std::endl;
   std::cout << std::endl;
 
-  return cuerror;
+  return max(cuda_error, cublas_error);
+
+
 
 // alpha*A*B + beta*C (side=left) or alpha*B*A + beta*C (side=right),  A is symmetric
 // cublasHandle_t handle,    // 
