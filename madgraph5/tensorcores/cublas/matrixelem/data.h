@@ -115,8 +115,7 @@ double cf_sym[cfmat_sym] = {
                                                                                                          62, -10, -10,  -1,
                                                                                                                8,   8, -64,
                                                                                                                    80,   8,
-                                                                                                                       512
-};
+                                                                                                                       512};
 
 // clang-format on
 
