@@ -44,9 +44,45 @@ int main() {
   cublasHandle_t handle;
   cublasCreate(&handle);
 
-  cublasOperation_t trans = CUBLAS_OP_N;
-  int m = 8, n = 8, lda = 0, incx = 0, incy = 0;
-  cuDoubleComplex *alpha = 0, *A = 0, *x = 0, *beta = 0, *y = 0;
+  cublasSideMode_t side = CUBLAS_SIDE_LEFT;
+  cublasFillMode_t uplo = CUBLAS_FILL_MODE_UPPER;
+  int m = 24, n = 1, lda = 24, ldb = 1, ldc = 1;
+  const double alpha = 1, beta = 0, *A, *B;
+  double *C;
+
+// alpha*A*B + beta*C (side=left) or alpha*B*A + beta*C (side=right),  A is symmetric
+// cublasHandle_t handle,    // 
+// cublasSideMode_t side     // CUBLAS_SIDE_LEFT or CUBLAS_SIDE_RIGHT (A is on the left or right side) 
+// cublasFillMode_t uplo,    // CUBLAS_FILL_MODE_LOWER (0) or CUBLAS_FILL_MODE_UPPER (1), lower or upper part is referenced
+// int m, int n,             // number of rows (m) or cols (n) of matrix C and B, with matrix A sized accordingly. 
+// const double *alpha,      // <type> scalar used for multiplication
+// const double *A,          // <type> array of dimension lda x m with lda>=max(1,m) if side == CUBLAS_SIDE_LEFT and lda x n with lda>=max(1,n) otherwise.
+// const double *B,          // <type> array of dimension ldb x n with ldb>=max(1,m). 
+// const double *beta,       // <type> scalar used for multiplication, if beta == 0 then C does not have to be a valid input.
+// double *C                 // <type> array of dimension ldb x n with ldb>=max(1,m).
+// int lda, ldb, ldc         // leading dimension of two-dimensional array used to store matrix A or B or C
+
+// cublasStatus_t cublasDsymm(cublasHandle_t handle,
+//                            cublasSideMode_t side, cublasFillMode_t uplo,
+//                            int m, int n,
+//                            const double          *alpha,
+//                            const double          *A, int lda,
+//                            const double          *B, int ldb,
+//                            const double          *beta,
+//                            double          *C, int ldc)
+
+  // matrix mult with sym matrix
+  cublasDsymm(handle, side, uplo, m, n, &alpha, A, lda, B, ldb, &beta, C, ldc);
+
+  // Destroy the handle
+  cublasDestroy(handle);
+
+
+  // --> old stuff
+
+  // cublasOperation_t trans = CUBLAS_OP_N;
+  // int m = 8, n = 8, lda = 0, incx = 0, incy = 0;
+  // cuDoubleComplex *alpha = 0, *A = 0, *x = 0, *beta = 0, *y = 0;
 
   // cublasHandle_t handle,
   // cublasOperation_t trans,
@@ -57,11 +93,9 @@ int main() {
   // const cuDoubleComplex *beta,
   // cuDoubleComplex *y, int incy
 
-  // Do the actual multiplication
-  cublasZgemv(handle, trans, m, n, alpha, A, lda, x, incx, beta, y, incy);
+  // Do the actual multiplication, this was for double complex, not needed !! (and doesn't work)
+  // cublasZgemv(handle, trans, m, n, alpha, A, lda, x, incx, beta, y, incy);
 
-  // Destroy the handle
-  cublasDestroy(handle);
 
 #else  // simple example
   const int M = 8, N = 8, K = 4, SA = M * K, SB = K * N, SC = M * N;
