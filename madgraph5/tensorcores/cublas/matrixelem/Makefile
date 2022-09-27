@@ -5,7 +5,7 @@ INCDIR = ../include
 HEADERS = $(INCDIR)/dev_array.h data.h hst_matrix.h kernel.h macros.h
 
 NVCC = nvcc
-CFLAGS = $(ARCH) -I $(INCDIR)
+CFLAGS = $(ARCH) -I $(INCDIR) -lcublas
 
 all: main
 
