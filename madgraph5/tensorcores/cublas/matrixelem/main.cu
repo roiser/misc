@@ -2,6 +2,7 @@
 #include "hst_matrix.h"
 #include "kernel.h"
 
+#include <iostream>
 #include <cuComplex.h>
 //#include <cublas.h>
 //#include <cublas_api.h>
@@ -40,19 +41,48 @@ int main() {
 
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
 
-  // Create a handle for CUBLAS
   cublasHandle_t handle;
-  cublasCreate(&handle);
-
+  cudaError_t cuerror;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_UPPER;
-  int m = 24, n = 1, lda = 24, ldb = 1, ldc = 1;
-  const double alpha = 1, beta = 0, *A, *B;
-  double *C;
+  int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24,
+//      asize = cfmat_sym * sizeof(double),
+      asize = cfmat * sizeof(double),
+      bsize = medim * sizeof(double);
+  const double alpha = 1, beta = 0,
+    *h_A = (double *)malloc(asize),
+    *h_B = (double *)malloc(bsize),
+    *d_A, *d_B;
+  double *h_C = (double *)malloc(bsize), *d_C;
+
+  cublasCreate(&handle);
+
+  memcpy((void*)h_A, &cf[0], asize);
+  memcpy((void*)h_B, &jamp0r[0], bsize);
+
+  cuerror = cudaMalloc((void**) &d_A, asize);
+  cuerror = cudaMalloc((void**) &d_B, bsize);
+  cuerror = cudaMalloc((void**) &d_C, bsize);
+
+  cuerror = cudaMemcpy((void*)d_A, h_A, asize, cudaMemcpyHostToDevice);
+  cuerror = cudaMemcpy((void*)d_B, h_B, bsize, cudaMemcpyHostToDevice);
+
+  cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
+
+  cuerror = cudaMemcpy(h_C, d_C, bsize, cudaMemcpyDeviceToHost);
+
+  cublasDestroy(handle);
+
+  // std::cout << "error code: " << cuerror << std::endl;
+
+  for (int i = 0; i < medim; ++i) std::cout << h_C[i] << std::endl;
+  std::cout << std::endl;
+
+  return cuerror;
 
 // alpha*A*B + beta*C (side=left) or alpha*B*A + beta*C (side=right),  A is symmetric
 // cublasHandle_t handle,    // 
-// cublasSideMode_t side     // CUBLAS_SIDE_LEFT or CUBLAS_SIDE_RIGHT (A is on the left or right side) 
+// cublasSideMode_t side     // CUBLAS_SIDE_LEFT or CUBLAS_SIDE_RIGHT (A is on the left or right side)
 // cublasFillMode_t uplo,    // CUBLAS_FILL_MODE_LOWER (0) or CUBLAS_FILL_MODE_UPPER (1), lower or upper part is referenced
 // int m, int n,             // number of rows (m) or cols (n) of matrix C and B, with matrix A sized accordingly. 
 // const double *alpha,      // <type> scalar used for multiplication
@@ -71,11 +101,6 @@ int main() {
 //                            const double          *beta,
 //                            double          *C, int ldc)
 
-  // matrix mult with sym matrix
-  cublasDsymm(handle, side, uplo, m, n, &alpha, A, lda, B, ldb, &beta, C, ldc);
-
-  // Destroy the handle
-  cublasDestroy(handle);
 
 
   // --> old stuff
