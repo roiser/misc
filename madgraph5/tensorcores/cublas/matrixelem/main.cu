@@ -1,8 +1,20 @@
+//#define DOUBLEPRECISION
+//#define TRANSPOSE
+
+#ifdef DOUBLEPRECISION
+#define TTYPE double
+#define CUB_SYMM cublasDsymm
+#define CUB_GEMV cublasDgemv
+#else
+#define TTYPE float
+#define CUB_SYMM cublasSsymm
+#define CUB_GEMV cublasSgemv
+#endif
+
 #include "data.h"
 
 #include <iostream>
 #include <cublas_v2.h>
-
 
 /*
 Docu
@@ -11,8 +23,7 @@ https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplic
 Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
 
-
-int mult(cublasHandle_t handle, const double *d_A, const double *d_B, double *d_C, double *d_y, double *h_y, int dsize, const double* d_Bt = 0) {
+int mult(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B, TTYPE *d_C, TTYPE *d_y, TTYPE *h_y, int dsize, const TTYPE* d_Bt = 0) {
 
   cublasStatus_t cublas_status;
   cudaError_t cuda_status;
@@ -21,9 +32,9 @@ int mult(cublasHandle_t handle, const double *d_A, const double *d_B, double *d_
   cublasOperation_t trans = CUBLAS_OP_N;
 
   int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24;
-  double alpha = 1, beta = 0;
+  TTYPE alpha = 1, beta = 0;
 
-  cublas_status = cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
+  cublas_status = CUB_SYMM(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
 
   int incx = 1, incy = 1;
   m = 1;
@@ -31,9 +42,9 @@ int mult(cublasHandle_t handle, const double *d_A, const double *d_B, double *d_
   lda = 1;
 
   if (d_Bt) 
-    cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_Bt, lda, d_C, incx, &beta, d_y, incy);
+    cublas_status = CUB_GEMV(handle, trans, m, n, &alpha, d_Bt, lda, d_C, incx, &beta, d_y, incy);
   else 
-    cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_B, lda, d_C, incx, &beta, d_y, incy);
+    cublas_status = CUB_GEMV(handle, trans, m, n, &alpha, d_B, lda, d_C, incx, &beta, d_y, incy);
   cuda_status = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
 
   return max(cublas_status, cuda_status);;
@@ -45,17 +56,17 @@ int main() {
   cublasHandle_t handle;
   cudaError_t cuda_status;
 
-  int dsize = sizeof(double),
+  int dsize = sizeof(TTYPE),
       vsize = dsize * medim,
       msize = vsize * medim,
       mult_status = 0;
-  const double
-    *h_A = (double *)malloc(msize),
-    *h_B = (double *)malloc(vsize),
+  const TTYPE
+    *h_A = (TTYPE *)malloc(msize),
+    *h_B = (TTYPE *)malloc(vsize),
     *d_A, *d_B;
-  double
-    *h_C = (double *)malloc(vsize), 
-    *h_y = (double*) malloc(dsize),
+  TTYPE
+    *h_C = (TTYPE *)malloc(vsize), 
+    *h_y = (TTYPE *)malloc(dsize),
     *d_C, *d_y, me;
 
   cuda_status = cudaMalloc((void**) &d_A, msize);
@@ -70,15 +81,16 @@ int main() {
 
   memcpy((void*)h_B, &jamp0r[0], vsize);
   cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
+
   mult_status = mult(handle, d_A, d_B, d_C, d_y, h_y, dsize);
   me = *h_y;
 
   memcpy((void*)h_B, &jamp0i[0], vsize);
   cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
 
-  double *d_Bt = 0;
+  TTYPE *d_Bt = 0;
 #ifdef TRANSPOSE
-  double *h_Bt =  (double *)malloc(vsize),
+  TTYPE *h_Bt =  (TTYPE *)malloc(vsize),
   for (int i= 0; i < medim; ++i)  h_Bt[i] = -1 * h_B[i];
   cuda_status = cudaMalloc((void**) &d_Bt, vsize);
   cuda_status = cudaMemcpy((void*)d_Bt, h_Bt, vsize, cudaMemcpyHostToDevice);
