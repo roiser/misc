@@ -14,46 +14,51 @@ https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplic
 Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
 
+
+double mult(double *cf, double *jamp) {
+}
+
 int main() {
 
-  // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
 
   //
   // first multiplication
   //
   cublasHandle_t handle;
   cudaError_t cuda_status;
+  cublasStatus_t cublas_status;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
-  int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24,
-      asize = cfmat * sizeof(double),
-      bsize = medim * sizeof(double),
-      status = 0;
-  const double alpha = 1, beta = 0,
-    *h_A = (double *)malloc(asize),
-    *h_B = (double *)malloc(bsize),
-    *d_A, *d_B;
-  double *h_C = (double *)malloc(bsize), *d_C;
-  cublasStatus_t cublas_status;
 
   cublasCreate(&handle);
 
-  memcpy((void*)h_A, &cf[0], asize);
-  memcpy((void*)h_B, &jamp0r[0], bsize);
+  int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24,
+      dsize = sizeof(double),
+      vsize = dsize * medim,
+      msize = vsize * medim,
+      status = 0;
+  const double alpha = 1, beta = 0,
+    *h_A = (double *)malloc(msize),
+    *h_B = (double *)malloc(vsize),
+    *d_A, *d_B;
+  double *h_C = (double *)malloc(vsize), *d_C;
 
-  cuda_status = cudaMalloc((void**) &d_A, asize);
-  cuda_status = cudaMalloc((void**) &d_B, bsize);
-  cuda_status = cudaMalloc((void**) &d_C, bsize);
+  memcpy((void*)h_A, &cf[0], msize);
+  memcpy((void*)h_B, &jamp0r[0], vsize);
 
-  cuda_status = cudaMemcpy((void*)d_A, h_A, asize, cudaMemcpyHostToDevice);
-  cuda_status = cudaMemcpy((void*)d_B, h_B, bsize, cudaMemcpyHostToDevice);
+  cuda_status = cudaMalloc((void**) &d_A, msize);
+  cuda_status = cudaMalloc((void**) &d_B, vsize);
+  cuda_status = cudaMalloc((void**) &d_C, vsize);
+
+  cuda_status = cudaMemcpy((void*)d_A, h_A, msize, cudaMemcpyHostToDevice);
+  cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
 
   cublas_status = cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
 
-  cuda_status = cudaMemcpy(h_C, d_C, bsize, cudaMemcpyDeviceToHost);
+  // cuda_status = cudaMemcpy(h_C, d_C, vsize, cudaMemcpyDeviceToHost);
 
-  for (int i = 0; i < medim; ++i) std::cout << h_C[i] << std::endl;
-  std::cout << std::endl;
+  // for (int i = 0; i < medim; ++i) std::cout << h_C[i] << std::endl;
+  // std::cout << std::endl;
 
   // 
   // second multiplication
@@ -66,11 +71,9 @@ int main() {
   n = 24;
   lda = 1;
 
-  cuda_status = cudaMalloc((void**) &d_y, sizeof(double));
-
+  cuda_status = cudaMalloc((void**) &d_y, dsize);
   cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_B, lda, d_C, incx, &beta, d_y, incy);
-
-  cuda_status = cudaMemcpy(h_y, d_y, sizeof(double), cudaMemcpyDeviceToHost);
+  cuda_status = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
 
   std::cout << "y: " << *h_y << std::endl;
 
@@ -87,6 +90,8 @@ int main() {
 
 }
 
+
+// https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
 
 // alpha*A*B + beta*C (side=left) or alpha*B*A + beta*C (side=right),  A is symmetric
 // cublasHandle_t handle,    // 
