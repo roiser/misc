@@ -1,9 +1,6 @@
-#include "dev_array.h"
-#include "hst_matrix.h"
-#include "kernel.h"
+#include "data.h"
 
 #include <iostream>
-#include <cuComplex.h>
 #include <cublas_v2.h>
 
 
@@ -15,7 +12,7 @@ Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
 
 
-int mult(cublasHandle_t handle, const double *d_A, const double *d_B, double *d_C, double *d_y, double *h_y, int dsize) {
+int mult(cublasHandle_t handle, const double *d_A, const double *d_B, double *d_C, double *d_y, double *h_y, int dsize, const double* d_Bt = 0) {
 
   cublasStatus_t cublas_status;
   cudaError_t cuda_status;
@@ -33,7 +30,10 @@ int mult(cublasHandle_t handle, const double *d_A, const double *d_B, double *d_
   n = 24;
   lda = 1;
 
-  cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_B, lda, d_C, incx, &beta, d_y, incy);
+  if (d_Bt) 
+    cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_Bt, lda, d_C, incx, &beta, d_y, incy);
+  else 
+    cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_B, lda, d_C, incx, &beta, d_y, incy);
   cuda_status = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
 
   return max(cublas_status, cuda_status);;
@@ -56,7 +56,7 @@ int main() {
   double
     *h_C = (double *)malloc(vsize), 
     *h_y = (double*) malloc(dsize),
-    *d_C, *d_y;
+    *d_C, *d_y, me;
 
   cuda_status = cudaMalloc((void**) &d_A, msize);
   cuda_status = cudaMalloc((void**) &d_B, vsize);
@@ -70,10 +70,24 @@ int main() {
 
   memcpy((void*)h_B, &jamp0r[0], vsize);
   cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
-
   mult_status = mult(handle, d_A, d_B, d_C, d_y, h_y, dsize);
+  me = *h_y;
 
-  std::cout << "y: " << *h_y << std::endl;
+  memcpy((void*)h_B, &jamp0i[0], vsize);
+  cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
+
+  double *d_Bt = 0;
+#ifdef TRANSPOSE
+  double *h_Bt =  (double *)malloc(vsize),
+  for (int i= 0; i < medim; ++i)  h_Bt[i] = -1 * h_B[i];
+  cuda_status = cudaMalloc((void**) &d_Bt, vsize);
+  cuda_status = cudaMemcpy((void*)d_Bt, h_Bt, vsize, cudaMemcpyHostToDevice);
+#endif
+
+  mult_status = mult(handle, d_A, d_B, d_C, d_y, h_y, dsize, d_Bt);
+  me += *h_y;
+
+  std::cout << "y: " << me << std::endl;
 
   cublasDestroy(handle);
 
