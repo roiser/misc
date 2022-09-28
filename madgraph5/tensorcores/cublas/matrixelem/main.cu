@@ -15,78 +15,69 @@ Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
 
 
-double mult(double *cf, double *jamp) {
-}
+int mult(cublasHandle_t handle, const double *d_A, const double *d_B, double *d_C, double *d_y, double *h_y, int dsize) {
 
-int main() {
-
-
-  //
-  // first multiplication
-  //
-  cublasHandle_t handle;
-  cudaError_t cuda_status;
   cublasStatus_t cublas_status;
+  cudaError_t cuda_status;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
+  cublasOperation_t trans = CUBLAS_OP_N;
 
-  cublasCreate(&handle);
-
-  int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24,
-      dsize = sizeof(double),
-      vsize = dsize * medim,
-      msize = vsize * medim,
-      status = 0;
-  const double alpha = 1, beta = 0,
-    *h_A = (double *)malloc(msize),
-    *h_B = (double *)malloc(vsize),
-    *d_A, *d_B;
-  double *h_C = (double *)malloc(vsize), *d_C;
-
-  memcpy((void*)h_A, &cf[0], msize);
-  memcpy((void*)h_B, &jamp0r[0], vsize);
-
-  cuda_status = cudaMalloc((void**) &d_A, msize);
-  cuda_status = cudaMalloc((void**) &d_B, vsize);
-  cuda_status = cudaMalloc((void**) &d_C, vsize);
-
-  cuda_status = cudaMemcpy((void*)d_A, h_A, msize, cudaMemcpyHostToDevice);
-  cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
+  int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24;
+  double alpha = 1, beta = 0;
 
   cublas_status = cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
 
-  // cuda_status = cudaMemcpy(h_C, d_C, vsize, cudaMemcpyDeviceToHost);
-
-  // for (int i = 0; i < medim; ++i) std::cout << h_C[i] << std::endl;
-  // std::cout << std::endl;
-
-  // 
-  // second multiplication
-  //
-
-  cublasOperation_t trans = CUBLAS_OP_N;
-  double *h_y = (double*) malloc(sizeof(double)), *d_y;
   int incx = 1, incy = 1;
   m = 1;
   n = 24;
   lda = 1;
 
-  cuda_status = cudaMalloc((void**) &d_y, dsize);
   cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_B, lda, d_C, incx, &beta, d_y, incy);
   cuda_status = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
 
-  std::cout << "y: " << *h_y << std::endl;
+  return max(cublas_status, cuda_status);;
 
-  //
-  // trailer
-  // 
+}
+
+int main() {
+
+  cublasHandle_t handle;
+  cudaError_t cuda_status;
+
+  int dsize = sizeof(double),
+      vsize = dsize * medim,
+      msize = vsize * medim,
+      mult_status = 0;
+  const double
+    *h_A = (double *)malloc(msize),
+    *h_B = (double *)malloc(vsize),
+    *d_A, *d_B;
+  double
+    *h_C = (double *)malloc(vsize), 
+    *h_y = (double*) malloc(dsize),
+    *d_C, *d_y;
+
+  cuda_status = cudaMalloc((void**) &d_A, msize);
+  cuda_status = cudaMalloc((void**) &d_B, vsize);
+  cuda_status = cudaMalloc((void**) &d_C, vsize);
+  cuda_status = cudaMalloc((void**) &d_y, dsize);
+
+  memcpy((void*)h_A, &cf[0], msize);
+  cuda_status = cudaMemcpy((void*)d_A, h_A, msize, cudaMemcpyHostToDevice);
+
+  cublasCreate(&handle);
+
+  memcpy((void*)h_B, &jamp0r[0], vsize);
+  cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
+
+  mult_status = mult(handle, d_A, d_B, d_C, d_y, h_y, dsize);
+
+  std::cout << "y: " << *h_y << std::endl;
 
   cublasDestroy(handle);
 
-  status = max(cuda_status, cublas_status);
-  if (status) std::cout << "error code: " << status << std::endl;
-
-  return status;
+  return max(mult_status, cuda_status);
 
 }
 
