@@ -4,12 +4,8 @@
 
 #include <iostream>
 #include <cuComplex.h>
-//#include <cublas.h>
-//#include <cublas_api.h>
 #include <cublas_v2.h>
 
-//#define MG5EXAMPLE
-#define CUBLAS
 
 /*
 Docu
@@ -20,109 +16,76 @@ Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 
 int main() {
 
-#if defined(MG5EXAMPLE)
-  const int dim = 24;
-  const int M = 2, K = dim, N = dim, SA = M * K, SB = K * N, SC = M * N;
-  double _A_mat_[SA], _B_mat_[SB], C_rm[SC];
-  dev_array<double> d_A(SA), d_B(SB), d_C(SC);
-
-  fill2(_A_mat_, _B_mat_, C_rm, M, N, K);
-  d_A.set(_A_mat_, SA);
-  d_B.set(_B_mat_, SB);
-
-  mmult<M, N, K><<<9, 32>>>(d_A.getData(), d_B.getData(), d_C.getData());
-  cudaDeviceSynchronize();
-  d_C.get(C_rm, SC);
-  cudaDeviceSynchronize();
-
-  print(_A_mat_, _B_mat_, C_rm, _A_rdm_, _A_cdm_, _B_rdm_, _B_cdm_, M, N, K);
-
-#elif defined(CUBLAS)
-
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
-
 
   //
   // first multiplication
   //
   cublasHandle_t handle;
-  cudaError_t cuda_error;
+  cudaError_t cuda_status;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
   int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24,
-//      asize = cfmat_sym * sizeof(double),
       asize = cfmat * sizeof(double),
-      bsize = medim * sizeof(double);
+      bsize = medim * sizeof(double),
+      status = 0;
   const double alpha = 1, beta = 0,
     *h_A = (double *)malloc(asize),
     *h_B = (double *)malloc(bsize),
     *d_A, *d_B;
   double *h_C = (double *)malloc(bsize), *d_C;
-  cublasStatus_t cublas_error;
+  cublasStatus_t cublas_status;
 
   cublasCreate(&handle);
-
-  // for (int i = 0; i < 24; ++i) {
-  //   for (int j = 0; j < 24; ++j) {
-  //     if (i != j) cf[i*24 + j] = 0;
-  //   }
-  // }
-
 
   memcpy((void*)h_A, &cf[0], asize);
   memcpy((void*)h_B, &jamp0r[0], bsize);
 
-  cuda_error = cudaMalloc((void**) &d_A, asize);
-  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
+  cuda_status = cudaMalloc((void**) &d_A, asize);
+  cuda_status = cudaMalloc((void**) &d_B, bsize);
+  cuda_status = cudaMalloc((void**) &d_C, bsize);
 
-  cuda_error = cudaMalloc((void**) &d_B, bsize);
-  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
+  cuda_status = cudaMemcpy((void*)d_A, h_A, asize, cudaMemcpyHostToDevice);
+  cuda_status = cudaMemcpy((void*)d_B, h_B, bsize, cudaMemcpyHostToDevice);
 
-  cuda_error = cudaMalloc((void**) &d_C, bsize);
-  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
+  cublas_status = cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
 
-  cuda_error = cudaMemcpy((void*)d_A, h_A, asize, cudaMemcpyHostToDevice);
-  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
-
-  cuda_error = cudaMemcpy((void*)d_B, h_B, bsize, cudaMemcpyHostToDevice);
-  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
-
-  for (int i = 0; i < 24; ++i) {
-    for (int j = 0; j < 24; ++j) {
-      std::cout <<  cf[i*24 + j] << " ";
-    }
-    std::cout << std::endl;
-  }
-
-
-  cublas_error = cublasDsymm(handle, side, uplo, m, n, &alpha, d_A, lda, d_B, ldb, &beta, d_C, ldc);
-  if (cublas_error) std::cout << "cublas error code: " << cublas_error << std::endl;
-
-  // cublasStatus_t cublasDgemv(cublasHandle_t handle, cublasOperation_t trans,
-  //                            int m, int n,
-  //                            const double          *alpha,
-  //                            const double          *A, int lda,
-  //                            const double          *x, int incx,
-  //                            const double          *beta,
-  //                            double          *y, int incy)
-  // 
-  // cublasOperation_t trans = CUBLAS_OP_N;
-  // int n2 = 24, incx = 1;
-  // cublas_error = cublasDgemv(handle, trans, m, n2, &alpha, d_A, lda, d_B, incx, &beta, d_C, incx);
-  // if (cublas_error) std::cout << "cublas error code: " << cublas_error << std::endl;
-
-  cuda_error = cudaMemcpy(h_C, d_C, bsize, cudaMemcpyDeviceToHost);
-  if (cuda_error) std::cout << "cuda error code: " << cuda_error << std::endl;
-
-  cublasDestroy(handle);
-
-  if (cuda_error) std::cout << "error code: " << cuda_error << std::endl;
+  cuda_status = cudaMemcpy(h_C, d_C, bsize, cudaMemcpyDeviceToHost);
 
   for (int i = 0; i < medim; ++i) std::cout << h_C[i] << std::endl;
   std::cout << std::endl;
 
-  return max(cuda_error, cublas_error);
+  // 
+  // second multiplication
+  //
 
+  cublasOperation_t trans = CUBLAS_OP_N;
+  double *h_y = (double*) malloc(sizeof(double)), *d_y;
+  int incx = 1, incy = 1;
+  m = 1;
+  n = 24;
+  lda = 1;
+
+  cuda_status = cudaMalloc((void**) &d_y, sizeof(double));
+
+  cublas_status = cublasDgemv(handle, trans, m, n, &alpha, d_B, lda, d_C, incx, &beta, d_y, incy);
+
+  cuda_status = cudaMemcpy(h_y, d_y, sizeof(double), cudaMemcpyDeviceToHost);
+
+  std::cout << "y: " << *h_y << std::endl;
+
+  //
+  // trailer
+  // 
+
+  cublasDestroy(handle);
+
+  status = max(cuda_status, cublas_status);
+  if (status) std::cout << "error code: " << status << std::endl;
+
+  return status;
+
+}
 
 
 // alpha*A*B + beta*C (side=left) or alpha*B*A + beta*C (side=right),  A is symmetric
@@ -148,40 +111,19 @@ int main() {
 
 
 
-  // --> old stuff
-
-  // cublasOperation_t trans = CUBLAS_OP_N;
-  // int m = 8, n = 8, lda = 0, incx = 0, incy = 0;
-  // cuDoubleComplex *alpha = 0, *A = 0, *x = 0, *beta = 0, *y = 0;
-
-  // cublasHandle_t handle,
-  // cublasOperation_t trans,
-  // int m, int n,
-  // const cuDoubleComplex *alpha,
-  // const cuDoubleComplex *A, int lda,
-  // const cuDoubleComplex *x, int incx,
-  // const cuDoubleComplex *beta,
-  // cuDoubleComplex *y, int incy
-
-  // Do the actual multiplication, this was for double complex, not needed !! (and doesn't work)
-  // cublasZgemv(handle, trans, m, n, alpha, A, lda, x, incx, beta, y, incy);
+// alpha*A(x) + beta*y
+// cublasOperation_t trans,      // operation op(A) that is non- or (conj.) transpose. CUBLAS_OP_N/T/H
+// int m, int n,                 // number of rows/cols of A
+// const double *x,              // vector x
+// double *y,                    // vector y
+// int incx, incy                // stride between consecutive elements of x/y. 
 
 
-#else  // simple example
-  const int M = 8, N = 8, K = 4, SA = M * K, SB = K * N, SC = M * N;
-  double _A_mat_[SA], _B_mat_[SB], C_rm[SC];
-  dev_array<double> d_A(SA), d_B(SB), d_C(SC);
+// cublasStatus_t cublasDgemv(cublasHandle_t handle, cublasOperation_t trans,
+//                            int m, int n,
+//                            const double          *alpha,
+//                            const double          *A, int lda,
+//                            const double          *x, int incx,
+//                            const double          *beta,
+//                            double          *y, int incy)
 
-  fill(_A_mat_, _B_mat_, C_rm, _A_rdm_, _A_cdm_, _B_rdm_, _B_cdm_, M, N);
-  d_A.set(_A_mat_, SA);
-  d_B.set(_B_mat_, SB);
-
-  mult<M, N, K><<<1, 32>>>(d_A.getData(), d_B.getData(), d_C.getData());
-  cudaDeviceSynchronize();
-  d_C.get(C_rm, SC);
-  cudaDeviceSynchronize();
-
-  print(_A_mat_, _B_mat_, C_rm, _A_rdm_, _A_cdm_, _B_rdm_, _B_cdm_, M, N, K);
-#endif // MG5EXAMPLE
-  return 0;
-}
