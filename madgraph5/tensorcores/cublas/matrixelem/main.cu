@@ -5,10 +5,12 @@
 #define TTYPE double
 #define CUB_SYMV cublasDsymm
 #define CUB_GEMV cublasDgemv
+// #define CUB_GEMV cublasDgemvBatched // cublasDgemv
 #else
 #define TTYPE float
 #define CUB_SYMV cublasSsymm
 #define CUB_GEMV cublasSgemv
+// #define CUB_GEMV cublasSgemvBatched // cublasSgemv
 #endif
 
 #include "data.h"
@@ -84,6 +86,7 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   t.Start();
   cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B, ncol, &beta, d_C, ncol);
   cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx, &beta, d_y, incy);
+  // cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, d_B, nevt, d_C, ncol, &beta, d_y, ncol, nevt);
   time += t.GetDuration();
 
   cudstat = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
@@ -109,7 +112,7 @@ int main() {
       mult_status = 0;
   const TTYPE *h_A = (TTYPE *)malloc(msize), // color matrix
       *h_B = (TTYPE *)malloc(vsize * nevt),  // jamps
-      *d_A, *d_Br, *d_Bi;
+      *d_A, *d_Br, *d_Bi, *tmp;
   TTYPE *h_C = (TTYPE *)malloc(vsize * nevt), // temp result
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
       *d_C, *d_y, me = 0, me2 = 0;
@@ -127,15 +130,17 @@ int main() {
   memcpy((void *)h_A, &cf[0], msize);
   cuda_status = cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
 
+  tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
-    memcpy((void *)h_B, &jamp0r[0], vsize);
-    //&h_B += 0;
+    memcpy((void *)tmp, &jamp0r[0], vsize);
+    tmp += 24;
   }
   cuda_status = cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
+  tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
-    memcpy((void *)h_B, &jamp0i[0], vsize);
-    //&h_B += 0;
+    memcpy((void *)tmp, &jamp0i[0], vsize);
+    tmp += 24;
   }
   cuda_status = cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
