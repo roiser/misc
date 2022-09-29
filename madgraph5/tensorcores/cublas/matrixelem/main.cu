@@ -1,13 +1,13 @@
 //#define DOUBLEPRECISION
-//#define TRANSPOSE
+//#define CONJUGATE
 
 #ifdef DOUBLEPRECISION
 #define TTYPE double
-#define CUB_SYMV cublasDsymv
+#define CUB_SYMV cublasDsymm
 #define CUB_GEMV cublasDgemv
 #else
 #define TTYPE float
-#define CUB_SYMV cublasSsymv
+#define CUB_SYMV cublasSsymm
 #define CUB_GEMV cublasSgemv
 #endif
 
@@ -27,6 +27,10 @@ https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplic
 Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
 
+
+//
+// org implementation on host
+//
 TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp) {
   int ncolor = 24;
   TTYPE deltaME = 0;
@@ -41,6 +45,10 @@ TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp) {
   return deltaME;
 }
 
+
+//
+// org implementation on device
+//
 __global__ void mult_native_device(const TTYPE *cf, const TTYPE *jampr,
                                    const TTYPE *jampi, TTYPE *deltaME) {
   int ncolor = 24;
@@ -55,48 +63,38 @@ __global__ void mult_native_device(const TTYPE *cf, const TTYPE *jampr,
   }
 }
 
+
+//
+// cublas implementation
+//
 int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
                 TTYPE *d_C, TTYPE *d_y, TTYPE *h_y, int dsize, float &time,
-                const TTYPE *d_Bt = 0) {
+                int nevt) {
 
-  cublasStatus_t cublas_status;
-  cudaError_t cuda_status;
+  cublasStatus_t cubstat;
+  cudaError_t cudstat;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
   cublasOperation_t trans = CUBLAS_OP_N;
 
   Timer<std::chrono::high_resolution_clock> t;
-  double tmptime = 0;
-
-  int m = 24, n = 1, lda = 24, ldb = 24, ldc = 24;
+  int ncol = 24, incx = 1, incy = 1;
   TTYPE alpha = 1, beta = 0;
 
   t.Start();
-  cublas_status =
-      CUB_SYMV(handle, uplo, m, &alpha, d_A, lda, d_B, 1, &beta, d_C, 1);
-  tmptime += t.GetDuration();
+  cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B, ncol, &beta, d_C, ncol);
+  cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx, &beta, d_y, incy);
+  time += t.GetDuration();
 
-  int incx = 1, incy = 1;
-  m = 1;
-  n = 24;
-  lda = 1;
+  cudstat = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
 
-  tmptime = 0.;
-  t.Start();
-  if (d_Bt)
-    cublas_status = CUB_GEMV(handle, trans, m, n, &alpha, d_Bt, lda, d_C, incx,
-                             &beta, d_y, incy);
-  else
-    cublas_status = CUB_GEMV(handle, trans, m, n, &alpha, d_B, lda, d_C, incx,
-                             &beta, d_y, incy);
-  tmptime += t.GetDuration();
-  time = tmptime;
-  cuda_status = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
-
-  return max(cublas_status, cuda_status);
-  ;
+  return max(cubstat, cudstat);
 }
 
+
+//
+// main
+//
 int main() {
 
   int nevt = 1;
@@ -105,60 +103,65 @@ int main() {
   cudaError_t cuda_status;
 
   Timer<std::chrono::high_resolution_clock> t;
-  float tmptime, time = 0.;
+  float time = 0.;
 
   int dsize = sizeof(TTYPE), vsize = dsize * medim, msize = vsize * medim,
       mult_status = 0;
   const TTYPE *h_A = (TTYPE *)malloc(msize), // color matrix
       *h_B = (TTYPE *)malloc(vsize * nevt),  // jamps
       *d_A, *d_Br, *d_Bi;
-  TTYPE
-  *h_C = (TTYPE *)malloc(vsize * nevt),     // temp result
-      *h_y = (TTYPE *)malloc(dsize * nevt), // matrix elements
+  TTYPE *h_C = (TTYPE *)malloc(vsize * nevt), // temp result
+      *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
       *d_C, *d_y, me = 0, me2 = 0;
 
   cuda_status = cudaMalloc((void **)&d_A, msize);  // color matrix
-  cuda_status = cudaMalloc((void **)&d_Br, vsize); // jamps real
-  cuda_status = cudaMalloc((void **)&d_Bi, vsize); // ramps imag
-  cuda_status = cudaMalloc((void **)&d_C, vsize);  // temp result
-  cuda_status = cudaMalloc((void **)&d_y, dsize);  // matrix elements
+  cuda_status = cudaMalloc((void **)&d_Br, vsize * nevt); // jamps real
+  cuda_status = cudaMalloc((void **)&d_Bi, vsize * nevt); // ramps imag
+  cuda_status = cudaMalloc((void **)&d_C, vsize * nevt);  // temp result
+  cuda_status = cudaMalloc((void **)&d_y, dsize * nevt);  // matrix elements
 
+
+  //
+  // prepare memory
+  //
   memcpy((void *)h_A, &cf[0], msize);
   cuda_status = cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
-
-  cublasCreate(&handle);
 
   for (int i = 0; i < nevt; ++i) {
     memcpy((void *)h_B, &jamp0r[0], vsize);
     //&h_B += 0;
   }
-  cuda_status = cudaMemcpy((void *)d_Br, h_B, vsize, cudaMemcpyHostToDevice);
+  cuda_status = cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
-  memcpy((void *)h_B, &jamp0i[0], vsize);
-  cuda_status = cudaMemcpy((void *)d_Bi, h_B, vsize, cudaMemcpyHostToDevice);
+  for (int i = 0; i < nevt; ++i) {
+    memcpy((void *)h_B, &jamp0i[0], vsize);
+    //&h_B += 0;
+  }
+  cuda_status = cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
-  TTYPE *d_Bt = 0;
-#ifdef TRANSPOSE
-  TTYPE *h_Bt = (TTYPE *)malloc(vsize),
-        for (int i = 0; i < medim; ++i) h_Bt[i] = -1 * h_B[i];
-  cuda_status = cudaMalloc((void **)&d_Bt, vsize);
-  cuda_status = cudaMemcpy((void *)d_Bt, h_Bt, vsize, cudaMemcpyHostToDevice);
+
+  //
+  // conjugate if needed
+  //
+#ifdef CONJUGATE
+  for (int i = 0; i < medim * nevt; ++i) h_Bi[i] = -1 * h_Bi[i];
+  cuda_status = cudaMemcpy((void *)d_Bi, h_Bi, vsize * nevt, cudaMemcpyHostToDevice);
 #endif
 
-  time = 0.;
-  mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, h_y, dsize, tmptime);
-  time += tmptime;
+  //
+  // cublas
+  //
+  cublasCreate(&handle);
+  mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, h_y, dsize, time, nevt);
   me += *h_y;
-
-  mult_status =
-      mult_cublas(handle, d_A, d_Bi, d_C, d_y, h_y, dsize, tmptime, d_Bt);
-  time += tmptime;
+  mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, h_y, dsize, time, nevt);
   me += *h_y;
-
-  std::cout << "cublas device: " << me << ", " << time << std::endl;
-
   cublasDestroy(handle);
+  std::cout << "cublas    : " << me << ", " << time << std::endl;
 
+  //
+  // org on host
+  //
   std::complex<TTYPE> jamp[vsize];
   for (int i = 0; i < vsize; ++i) {
     jamp[i] = std::complex<TTYPE>(jamp0r[i], jamp0i[i]);
@@ -166,18 +169,16 @@ int main() {
   time = 0.;
   t.Start();
   me2 = mult_native_host(cf, jamp);
-  std::cout << "native host  : " << me2 << ", " << t.GetDuration() << std::endl;
+  std::cout << "org host  : " << me2 << ", " << t.GetDuration() << std::endl;
 
-  TTYPE *d_jamp;
-  // cuda_status = cudaMalloc((void**) &d_jamp, vsize * 2);
-  // cuda_status = cudaMemcpy((void*) d_jamp, jamp, vsize * 2,
-  // cudaMemcpyHostToDevice);
+  //
+  // org on device
+  // 
   time = 0.;
   t.Start();
   mult_native_device<<<1, 1>>>(d_A, d_Br, d_Bi, d_y);
   cuda_status = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
-  std::cout << "native device: " << *h_y << ", " << t.GetDuration()
-            << std::endl;
+  std::cout << "org device: " << *h_y << ", " << t.GetDuration() << std::endl;
 
   return max(mult_status, cuda_status);
 }
