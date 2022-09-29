@@ -67,7 +67,7 @@ int main() {
   TTYPE
     *h_C = (TTYPE *)malloc(vsize), 
     *h_y = (TTYPE *)malloc(dsize),
-    *d_C, *d_y, me;
+    *d_C, *d_y, me = 0;
 
   cuda_status = cudaMalloc((void**) &d_A, msize);
   cuda_status = cudaMalloc((void**) &d_B, vsize);
@@ -83,7 +83,7 @@ int main() {
   cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
 
   mult_status = mult(handle, d_A, d_B, d_C, d_y, h_y, dsize);
-  me = *h_y;
+  me += *h_y;
 
   memcpy((void*)h_B, &jamp0i[0], vsize);
   cuda_status = cudaMemcpy((void*)d_B, h_B, vsize, cudaMemcpyHostToDevice);
