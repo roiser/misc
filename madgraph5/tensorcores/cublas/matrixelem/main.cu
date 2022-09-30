@@ -1,17 +1,24 @@
 //#define DOUBLEPRECISION
 //#define CONJUGATE
+//#define NEWSIGNATURE
 
 #ifdef DOUBLEPRECISION
 #define TTYPE double
 #define CUB_SYMV cublasDsymm
+#ifdef NEWSIGNATURE
+#define CUB_GEMV cublasDgemvBatched
+#else // NEWSIGNATURE
 #define CUB_GEMV cublasDgemv
-// #define CUB_GEMV cublasDgemvBatched // cublasDgemv
-#else
+#endif // NEWSIGNATURE
+#else  // DOUBLEPRECISION
 #define TTYPE float
 #define CUB_SYMV cublasSsymm
+#ifdef NEWSIGNATURE
+#define CUB_GEMV cublasSgemvBatched
+#else // NEWSIGNATURE
 #define CUB_GEMV cublasSgemv
-// #define CUB_GEMV cublasSgemvBatched // cublasSgemv
-#endif
+#endif // NEWSIGNATURE
+#endif // DOUBLEPRECISION
 
 #include "data.h"
 #include "timer.h"
@@ -28,7 +35,6 @@ https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#wmma
 https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html
 Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 */
-
 
 //
 // org implementation on host
@@ -47,7 +53,6 @@ TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp) {
   return deltaME;
 }
 
-
 //
 // org implementation on device
 //
@@ -65,35 +70,43 @@ __global__ void mult_native_device(const TTYPE *cf, const TTYPE *jampr,
   }
 }
 
-
 //
 // cublas implementation
 //
 int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
-                TTYPE *d_C, TTYPE *d_y, TTYPE *h_y, int dsize, float &time,
-                int nevt) {
+                TTYPE *d_C, TTYPE *d_y, int dsize, float &time, int nevt) {
 
   cublasStatus_t cubstat;
-  cudaError_t cudstat;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
   cublasOperation_t trans = CUBLAS_OP_N;
 
   Timer<std::chrono::high_resolution_clock> t;
-  int ncol = 24, incx = 1, incy = 1;
+  int ncol = 24;
   TTYPE alpha = 1, beta = 0;
 
+  // float (*somethingAsMatrix)[2] = (float (*)[2]) matrixReturnAsArray;
+  // TTYPE const *const *B = (const TTYPE(*)[nevt])d_B;
+  // const TTYPE(*C)[] = (TTYPE(*)[])d_C;
+  // const TTYPE(*y)[] = (TTYPE(*)[])d_y;
+
   t.Start();
-  cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B, ncol, &beta, d_C, ncol);
-  cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx, &beta, d_y, incy);
-  // cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, d_B, nevt, d_C, ncol, &beta, d_y, ncol, nevt);
+  cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B,
+                     ncol, &beta, d_C, ncol);
+#ifdef NEWSIGNATURE
+  cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, (TTYPE const *const *)&d_B,
+                     ncol, (TTYPE const *const *)&d_C, ncol, &beta,
+                     (TTYPE *const *)&d_y, ncol, nevt);
+#else // NEWSIGNATURE
+  int incx = 1, incy = 1;
+  cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx,
+                     &beta, d_y, incy);
+
+#endif // NEWSIGNATURE
   time += t.GetDuration();
 
-  cudstat = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
-
-  return max(cubstat, cudstat);
+  return cubstat;
 }
-
 
 //
 // main
@@ -117,16 +130,15 @@ int main() {
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
       *d_C, *d_y, me = 0, me2 = 0;
 
-  cuda_status = cudaMalloc((void **)&d_A, msize);  // color matrix
+  //
+  // prepare memory
+  //
+  cuda_status = cudaMalloc((void **)&d_A, msize);         // color matrix
   cuda_status = cudaMalloc((void **)&d_Br, vsize * nevt); // jamps real
   cuda_status = cudaMalloc((void **)&d_Bi, vsize * nevt); // ramps imag
   cuda_status = cudaMalloc((void **)&d_C, vsize * nevt);  // temp result
   cuda_status = cudaMalloc((void **)&d_y, dsize * nevt);  // matrix elements
 
-
-  //
-  // prepare memory
-  //
   memcpy((void *)h_A, &cf[0], msize);
   cuda_status = cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
 
@@ -135,34 +147,39 @@ int main() {
     memcpy((void *)tmp, &jamp0r[0], vsize);
     tmp += 24;
   }
-  cuda_status = cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
+  cuda_status =
+      cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
   tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
     memcpy((void *)tmp, &jamp0i[0], vsize);
     tmp += 24;
   }
-  cuda_status = cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
-
+  cuda_status =
+      cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
   //
   // conjugate if needed
   //
 #ifdef CONJUGATE
-  for (int i = 0; i < medim * nevt; ++i) h_Bi[i] = -1 * h_Bi[i];
-  cuda_status = cudaMemcpy((void *)d_Bi, h_Bi, vsize * nevt, cudaMemcpyHostToDevice);
+  for (int i = 0; i < medim * nevt; ++i)
+    h_Bi[i] = -1 * h_Bi[i];
+  cuda_status =
+      cudaMemcpy((void *)d_Bi, h_Bi, vsize * nevt, cudaMemcpyHostToDevice);
 #endif
 
   //
   // cublas
   //
   cublasCreate(&handle);
-  mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, h_y, dsize, time, nevt);
+  mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, dsize, time, nevt);
+  cuda_status = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += *h_y;
-  mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, h_y, dsize, time, nevt);
+  mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, dsize, time, nevt);
+  cuda_status = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += *h_y;
-  cublasDestroy(handle);
   std::cout << "cublas    : " << me << ", " << time << std::endl;
+  cublasDestroy(handle);
 
   //
   // org on host
@@ -178,11 +195,11 @@ int main() {
 
   //
   // org on device
-  // 
+  //
   time = 0.;
   t.Start();
   mult_native_device<<<1, 1>>>(d_A, d_Br, d_Bi, d_y);
-  cuda_status = cudaMemcpy(h_y, d_y, dsize, cudaMemcpyDeviceToHost);
+  cuda_status = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   std::cout << "org device: " << *h_y << ", " << t.GetDuration() << std::endl;
 
   return max(mult_status, cuda_status);
