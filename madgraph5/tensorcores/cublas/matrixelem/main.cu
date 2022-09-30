@@ -1,5 +1,5 @@
 //#define DOUBLEPRECISION
-//#define CONJUGATE
+//#define COMPLEXCONJUGATE
 //#define NEWSIGNATURE
 
 #ifdef DOUBLEPRECISION
@@ -116,7 +116,7 @@ int main() {
   int nevt = 1;
 
   cublasHandle_t handle;
-  cudaError_t cuda_status;
+  cudaError_t custat;
 
   Timer<std::chrono::high_resolution_clock> t;
   float time = 0.;
@@ -133,50 +133,47 @@ int main() {
   //
   // prepare memory
   //
-  cuda_status = cudaMalloc((void **)&d_A, msize);         // color matrix
-  cuda_status = cudaMalloc((void **)&d_Br, vsize * nevt); // jamps real
-  cuda_status = cudaMalloc((void **)&d_Bi, vsize * nevt); // ramps imag
-  cuda_status = cudaMalloc((void **)&d_C, vsize * nevt);  // temp result
-  cuda_status = cudaMalloc((void **)&d_y, dsize * nevt);  // matrix elements
+  custat = cudaMalloc((void **)&d_A, msize);         // color matrix
+  custat = cudaMalloc((void **)&d_Br, vsize * nevt); // jamps real
+  custat = cudaMalloc((void **)&d_Bi, vsize * nevt); // ramps imag
+  custat = cudaMalloc((void **)&d_C, vsize * nevt);  // temp result
+  custat = cudaMalloc((void **)&d_y, dsize * nevt);  // matrix elements
 
   memcpy((void *)h_A, &cf[0], msize);
-  cuda_status = cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
+  custat = cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
 
   tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
     memcpy((void *)tmp, &jamp0r[0], vsize);
     tmp += 24;
   }
-  cuda_status =
-      cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
+  custat = cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
   tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
     memcpy((void *)tmp, &jamp0i[0], vsize);
     tmp += 24;
   }
-  cuda_status =
-      cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
+  custat = cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
   //
   // conjugate if needed
   //
-#ifdef CONJUGATE
+#ifdef COMPLEXCONJUGATE
   for (int i = 0; i < medim * nevt; ++i)
     h_Bi[i] = -1 * h_Bi[i];
-  cuda_status =
-      cudaMemcpy((void *)d_Bi, h_Bi, vsize * nevt, cudaMemcpyHostToDevice);
-#endif
+  custat = cudaMemcpy((void *)d_Bi, h_Bi, vsize * nevt, cudaMemcpyHostToDevice);
+#endif // COMPLEXCONJUGATE
 
   //
   // cublas
   //
   cublasCreate(&handle);
   mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, dsize, time, nevt);
-  cuda_status = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
+  custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += *h_y;
   mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, dsize, time, nevt);
-  cuda_status = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
+  custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += *h_y;
   std::cout << "cublas    : " << me << ", " << time << std::endl;
   cublasDestroy(handle);
@@ -199,10 +196,10 @@ int main() {
   time = 0.;
   t.Start();
   mult_native_device<<<1, 1>>>(d_A, d_Br, d_Bi, d_y);
-  cuda_status = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
+  custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   std::cout << "org device: " << *h_y << ", " << t.GetDuration() << std::endl;
 
-  return max(mult_status, cuda_status);
+  return max(mult_status, custat);
 }
 
 // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
