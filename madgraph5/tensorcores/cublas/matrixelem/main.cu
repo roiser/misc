@@ -85,18 +85,19 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   int ncol = 24;
   TTYPE alpha = 1, beta = 0;
 
-  // float (*somethingAsMatrix)[2] = (float (*)[2]) matrixReturnAsArray;
-  // TTYPE const *const *B = (const TTYPE(*)[nevt])d_B;
-  // const TTYPE(*C)[] = (TTYPE(*)[])d_C;
-  // const TTYPE(*y)[] = (TTYPE(*)[])d_y;
-
   t.Start();
   cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B,
                      ncol, &beta, d_C, ncol);
 #ifdef NEWSIGNATURE
-  cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, (TTYPE const *const *)&d_B,
-                     ncol, (TTYPE const *const *)&d_C, ncol, &beta,
-                     (TTYPE *const *)&d_y, ncol, nevt);
+  const TTYPE *d_BB[nevt], *d_CC[nevt];
+  TTYPE *d_yy[nevt];
+  for (int i = 0; i < nevt; ++i) {
+    d_BB[i] = &d_B[i * ncol];
+    d_CC[i] = &d_C[i * ncol];
+    d_yy[i] = &d_y[i];
+  }
+  cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, d_BB, ncol, d_CC, ncol,
+                     &beta, d_yy, ncol, nevt);
 #else // NEWSIGNATURE
   int incx = 1, incy = 1;
   cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx,
@@ -149,12 +150,30 @@ int main() {
   }
   custat = cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
 
+  // debug h_Br
+  // custat = cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
+  // for (int i = 0; i < medim * nevt; ++i) {
+  //   std::cout << h_B[i] << ", ";
+  //   if ((i + 1) % medim == 0)
+  //     std::cout << std::endl;
+  // }
+  // std::cout << std::endl;
+
   tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
     memcpy((void *)tmp, &jamp0i[0], vsize);
     tmp += 24;
   }
   custat = cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
+
+  // debug h_Bi
+  // custat = cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
+  // for (int i = 0; i < medim * nevt; ++i) {
+  //   std::cout << h_B[i] << ", ";
+  //   if ((i + 1) % medim == 0)
+  //     std::cout << std::endl;
+  // }
+  // std::cout << std::endl;
 
   //
   // conjugate if needed
@@ -170,6 +189,16 @@ int main() {
   //
   cublasCreate(&handle);
   mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, dsize, time, nevt);
+
+  // debug h_C
+  // custat = cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
+  // for (int i = 0; i < medim * nevt; ++i) {
+  //   std::cout << h_C[i] << ", ";
+  //   if ((i + 1) % medim == 0)
+  //     std::cout << std::endl;
+  // }
+  // std::cout << std::endl;
+
   custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += *h_y;
   mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, dsize, time, nevt);
