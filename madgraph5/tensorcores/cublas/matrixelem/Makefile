@@ -1,4 +1,4 @@
-CUDA_ARCH = 80
+CUDA_ARCH = 70 # 80
 ARCH = -arch sm_$(CUDA_ARCH)
 
 INCDIR = ../include
