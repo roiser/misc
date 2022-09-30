@@ -1,6 +1,6 @@
 //#define DOUBLEPRECISION
 //#define COMPLEXCONJUGATE
-//#define NEWSIGNATURE
+#define NEWSIGNATURE
 
 #ifdef DOUBLEPRECISION
 #define TTYPE double
@@ -71,10 +71,25 @@ __global__ void mult_native_device(const TTYPE *cf, const TTYPE *jampr,
 }
 
 //
+// kernel to set the pointers to arrays
+//
+__global__ void setMem(const TTYPE *d_B, TTYPE *d_C, TTYPE *d_y,
+                       const TTYPE **d_BB, TTYPE **d_CC, TTYPE **d_yy, int nevt,
+                       int ncol) {
+  // sr war TTYPE *d_XX[nevt]
+  for (int i = 0; i < nevt; ++i) {
+    d_BB[i] = &d_B[i * ncol];
+    d_CC[i] = &d_C[i * ncol];
+    d_yy[i] = &d_y[i];
+  }
+}
+
+//
 // cublas implementation
 //
 int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
-                TTYPE *d_C, TTYPE *d_y, int dsize, float &time, int nevt) {
+                TTYPE *d_C, TTYPE *d_y, const TTYPE *d_BB, TTYPE *d_CC,
+                TTYPE *d_yy, int dsize, float &time, int nevt) {
 
   cublasStatus_t cubstat;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
@@ -86,18 +101,15 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   TTYPE alpha = 1, beta = 0;
 
   t.Start();
+  // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-symm
   cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B,
                      ncol, &beta, d_C, ncol);
+  setMem<<<1, 1>>>(d_B, d_C, d_y, (const TTYPE **)d_BB, (TTYPE **)d_CC,
+                   (TTYPE **)d_yy, ncol, nevt);
 #ifdef NEWSIGNATURE
-  const TTYPE *d_BB[nevt], *d_CC[nevt];
-  TTYPE *d_yy[nevt];
-  for (int i = 0; i < nevt; ++i) {
-    d_BB[i] = &d_B[i * ncol];
-    d_CC[i] = &d_C[i * ncol];
-    d_yy[i] = &d_y[i];
-  }
-  cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, d_BB, ncol, d_CC, ncol,
-                     &beta, d_yy, ncol, nevt);
+  // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemvbatched
+  cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
+                     (TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
 #else // NEWSIGNATURE
   int incx = 1, incy = 1;
   cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx,
@@ -126,10 +138,10 @@ int main() {
       mult_status = 0;
   const TTYPE *h_A = (TTYPE *)malloc(msize), // color matrix
       *h_B = (TTYPE *)malloc(vsize * nevt),  // jamps
-      *d_A, *d_Br, *d_Bi, *tmp;
+      *d_A, *d_Br, *d_Bi, *d_BB, *tmp;
   TTYPE *h_C = (TTYPE *)malloc(vsize * nevt), // temp result
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
-      *d_C, *d_y, me = 0, me2 = 0;
+      *d_C, *d_CC, *d_y, *d_yy, me = 0, me2 = 0;
 
   //
   // prepare memory
@@ -139,6 +151,10 @@ int main() {
   custat = cudaMalloc((void **)&d_Bi, vsize * nevt); // ramps imag
   custat = cudaMalloc((void **)&d_C, vsize * nevt);  // temp result
   custat = cudaMalloc((void **)&d_y, dsize * nevt);  // matrix elements
+
+  custat = cudaMalloc((void **)&d_BB, sizeof(TTYPE *) * nevt); // batch gemv
+  custat = cudaMalloc((void **)&d_CC, sizeof(TTYPE *) * nevt); // batch gemv
+  custat = cudaMalloc((void **)&d_yy, sizeof(TTYPE *) * nevt); // batch gemv
 
   memcpy((void *)h_A, &cf[0], msize);
   custat = cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
@@ -188,7 +204,8 @@ int main() {
   // cublas
   //
   cublasCreate(&handle);
-  mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, dsize, time, nevt);
+  mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, d_BB, d_CC, d_yy,
+                            dsize, time, nevt);
 
   // debug h_C
   // custat = cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
@@ -201,7 +218,8 @@ int main() {
 
   custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += *h_y;
-  mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, dsize, time, nevt);
+  mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, d_BB, d_CC, d_yy,
+                            dsize, time, nevt);
   custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += *h_y;
   std::cout << "cublas    : " << me << ", " << time << std::endl;
