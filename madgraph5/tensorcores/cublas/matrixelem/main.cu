@@ -1,21 +1,30 @@
 //#define DOUBLEPRECISION
 //#define COMPLEXCONJUGATE
-#define NEWSIGNATURE
 
-#ifdef DOUBLEPRECISION
+#define NEWSIGNATURE
+//#define NEWSIGNATURE_GEMM
+
+#if defined(DOUBLEPRECISION)
 #define TTYPE double
 #define CUB_SYMV cublasDsymm
-#ifdef NEWSIGNATURE
+
+#if defined(NEWSIGNATURE)
 #define CUB_GEMV cublasDgemvBatched
-#else // NEWSIGNATURE
+#elif defined(NEWSIGNATURE_GEMM)
+#define CUB_GEMV cublasDgemmBatched
+#else
 #define CUB_GEMV cublasDgemv
 #endif // NEWSIGNATURE
-#else  // DOUBLEPRECISION
+
+#else // DOUBLEPRECISION
 #define TTYPE float
 #define CUB_SYMV cublasSsymm
-#ifdef NEWSIGNATURE
+
+#if defined(NEWSIGNATURE)
 #define CUB_GEMV cublasSgemvBatched
-#else // NEWSIGNATURE
+#elif defined(NEWSIGNATURE_GEMM)
+#define CUB_GEMV cublasSgemmBatched
+#else
 #define CUB_GEMV cublasSgemv
 #endif // NEWSIGNATURE
 #endif // DOUBLEPRECISION
@@ -116,16 +125,21 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
                      ncol, &beta, d_C, ncol);
   setMem<<<1, 1>>>(d_B, d_C, d_y, (const TTYPE **)d_BB, (TTYPE **)d_CC,
                    (TTYPE **)d_yy, ncol, nevt);
-#ifdef NEWSIGNATURE
+#if defined(NEWSIGNATURE)
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemvbatched
   cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
                      (TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
-#else // NEWSIGNATURE
+#elif defined(NEWSIGNATURE_GEMM)
+  // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
+  cubstat =
+      CUB_GEMV(handle, trans, trans, 1, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
+               (TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
+#else  // NEWSIGNATURE
   int incx = 1, incy = 1;
   cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx,
                      &beta, d_y, incy);
-
 #endif // NEWSIGNATURE
+
   time += t.GetDuration();
 
   printMem<<<1, 1>>>(d_C, (TTYPE **)d_CC, nevt);
@@ -263,24 +277,58 @@ int main() {
   return max(mult_status, custat);
 }
 
+//
+//
+// https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
+//
+// cublasStatus_t cublasSgemmBatched(cublasHandle_t handle,
+//                                   cublasOperation_t transa,
+//                                   cublasOperation_t transb,
+//                                   int m, int n, int k,
+//                                   const float           *alpha,
+//                                   const float           *Aarray[], int lda,
+//                                   const float           *Barray[], int ldb,
+//                                   const float           *beta,
+//                                   float           *Carray[], int ldc,
+//                                   int batchCount)
+
+//
+//
 // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
-
+//
 // alpha*A*B + beta*C (side=left) or alpha*B*A + beta*C (side=right),  A is
-// symmetric cublasHandle_t handle,    // cublasSideMode_t side     //
-// CUBLAS_SIDE_LEFT or CUBLAS_SIDE_RIGHT (A is on the left or right side)
+// symmetric
+//
+// cublasHandle_t handle,    // cublasSideMode_t side CUBLAS_SIDE_LEFT or
+//                              CUBLAS_SIDE_RIGHT (A is on the left or right
+//                              side)
+//
 // cublasFillMode_t uplo,    // CUBLAS_FILL_MODE_LOWER (0) or
-// CUBLAS_FILL_MODE_UPPER (1), lower or upper part is referenced int m, int n,
-// // number of rows (m) or cols (n) of matrix C and B, with matrix A sized
-// accordingly. const double *alpha,      // <type> scalar used for
-// multiplication const double *A,          // <type> array of dimension lda x m
-// with lda>=max(1,m) if side == CUBLAS_SIDE_LEFT and lda x n with lda>=max(1,n)
-// otherwise. const double *B,          // <type> array of dimension ldb x n
-// with ldb>=max(1,m). const double *beta,       // <type> scalar used for
-// multiplication, if beta == 0 then C does not have to be a valid input. double
-// *C                 // <type> array of dimension ldb x n with ldb>=max(1,m).
+//                              CUBLAS_FILL_MODE_UPPER (1), lower or upper part
+//                              is referenced
+//
+// int m, int n              // number of rows (m)  or cols (n) of matrix C and
+//                              B, with matrix A sized accordingly.
+//
+// const double *alpha,      // <type> scalar used for multiplication
+//
+// const double *A,          // <type> array of dimension lda x m with
+//                              lda>=max(1,m) if side == CUBLAS_SIDE_LEFT and
+//                              lda x n with lda>=max(1,n) otherwise.
+//
+// const double *B,          // <type> array of dimension ldb x n with
+//                              ldb>=max(1,m).
+//
+// const double *beta,       // <type> scalar used for multiplication, if
+//                              beta == 0 then C does not have to be a valid
+//                              input.
+//
+// double *C                 // <type> array of dimension ldb x n with
+//                              ldb>=max(1,m).
+//
 // int lda, ldb, ldc         // leading dimension of two-dimensional array used
-// to store matrix A or B or C
-
+//                              to store matrix A or B or C
+//
 // cublasStatus_t cublasDsymm(cublasHandle_t handle,
 //                            cublasSideMode_t side, cublasFillMode_t uplo,
 //                            int m, int n,
@@ -290,13 +338,17 @@ int main() {
 //                            const double          *beta,
 //                            double          *C, int ldc)
 
+//
+//
+//
 // alpha*A(x) + beta*y
 // cublasOperation_t trans,      // operation op(A) that is non- or (conj.)
-// transpose. CUBLAS_OP_N/T/H int m, int n,                 // number of
-// rows/cols of A const double *x,              // vector x double *y, // vector
-// y int incx, incy                // stride between consecutive elements of
-// x/y.
-
+//                                  transpose. CUBLAS_OP_N/T/H
+// int m, int n,                 // number of rows/cols of A
+// const double *x,              // vector x
+// double *y,                    // vector y
+// int incx, incy                // stride between consecutive elements of x/y.
+//
 // cublasStatus_t cublasDgemv(cublasHandle_t handle, cublasOperation_t trans,
 //                            int m, int n,
 //                            const double          *alpha,
