@@ -74,14 +74,24 @@ __global__ void mult_native_device(const TTYPE *cf, const TTYPE *jampr,
 // kernel to set the pointers to arrays
 //
 __global__ void setMem(const TTYPE *d_B, TTYPE *d_C, TTYPE *d_y,
-                       const TTYPE **d_BB, TTYPE **d_CC, TTYPE **d_yy, int nevt,
-                       int ncol) {
+                       const TTYPE **d_BB, TTYPE **d_CC, TTYPE **d_yy, int ncol,
+                       int nevt) {
   // sr war TTYPE *d_XX[nevt]
   for (int i = 0; i < nevt; ++i) {
+    // d_y[i] = 0.;
     d_BB[i] = &d_B[i * ncol];
     d_CC[i] = &d_C[i * ncol];
     d_yy[i] = &d_y[i];
+    // printf("%f\n", d_BB[i][0]);
   }
+}
+
+//
+// print mem
+//
+__global__ void printMem(TTYPE *d_y, TTYPE **d_yy, int nevt) {
+  for (int i = 0; i < nevt; ++i)
+    printf("kernel d_y, evt %d: %f, %f\n", i, d_yy[i][0], d_y[i]);
 }
 
 //
@@ -118,6 +128,8 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 #endif // NEWSIGNATURE
   time += t.GetDuration();
 
+  printMem<<<1, 1>>>(d_C, (TTYPE **)d_CC, nevt);
+
   return cubstat;
 }
 
@@ -126,7 +138,7 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 //
 int main() {
 
-  int nevt = 1;
+  int nevt = 2;
 
   cublasHandle_t handle;
   cudaError_t custat;
@@ -217,11 +229,13 @@ int main() {
   // std::cout << std::endl;
 
   custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
-  me += *h_y;
+  me += h_y[0];
+  std::cout << h_y[0] << " - " << h_y[1] << std::endl;
   mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, d_BB, d_CC, d_yy,
                             dsize, time, nevt);
   custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
-  me += *h_y;
+  me += h_y[0];
+  std::cout << h_y[0] << " - " << h_y[1] << std::endl;
   std::cout << "cublas    : " << me << ", " << time << std::endl;
   cublasDestroy(handle);
 
