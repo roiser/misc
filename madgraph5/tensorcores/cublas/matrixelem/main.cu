@@ -1,32 +1,34 @@
 //#define DOUBLEPRECISION
 //#define COMPLEXCONJUGATE
 
-#define NEWSIGNATURE
+#define NEWSIGNATURE_GEMV // <-- <-- <--
 //#define NEWSIGNATURE_GEMM
 
 #if defined(DOUBLEPRECISION)
 #define TTYPE double
 #define CUB_SYMV cublasDsymm
 
-#if defined(NEWSIGNATURE)
+#if defined(NEWSIGNATURE_GEMV)
+#define SETMEM
 #define CUB_GEMV cublasDgemvBatched
 #elif defined(NEWSIGNATURE_GEMM)
 #define CUB_GEMV cublasDgemmBatched
 #else
 #define CUB_GEMV cublasDgemv
-#endif // NEWSIGNATURE
+#endif // NEWSIGNATURE_GEMV
 
 #else // DOUBLEPRECISION
 #define TTYPE float
 #define CUB_SYMV cublasSsymm
 
-#if defined(NEWSIGNATURE)
+#if defined(NEWSIGNATURE_GEMV)
+#define SETMEM
 #define CUB_GEMV cublasSgemvBatched
 #elif defined(NEWSIGNATURE_GEMM)
 #define CUB_GEMV cublasSgemmBatched
 #else
 #define CUB_GEMV cublasSgemv
-#endif // NEWSIGNATURE
+#endif // NEWSIGNATURE_GEMV
 #endif // DOUBLEPRECISION
 
 #include "data.h"
@@ -99,8 +101,13 @@ __global__ void setMem(const TTYPE *d_B, TTYPE *d_C, TTYPE *d_y,
 // print mem
 //
 __global__ void printMem(TTYPE *d_y, TTYPE **d_yy, int nevt) {
-  for (int i = 0; i < nevt; ++i)
-    printf("kernel d_y, evt %d: %f, %f\n", i, d_yy[i][0], d_y[i]);
+  for (int i = 0; i < nevt; ++i) {
+    printf("kernel d_y, evt %d: %f", i, d_y[i]);
+#if defined(SETMEM)
+    printf(", %f", d_yy[i][0]);
+#endif
+    printf("\n");
+  }
 }
 
 //
@@ -113,7 +120,7 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   cublasStatus_t cubstat;
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
-  cublasOperation_t trans = CUBLAS_OP_N;
+  cublasOperation_t transn = CUBLAS_OP_N, transt = CUBLAS_OP_T;
 
   Timer<std::chrono::high_resolution_clock> t;
   int ncol = 24;
@@ -123,26 +130,33 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-symm
   cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B,
                      ncol, &beta, d_C, ncol);
+  cudaDeviceSynchronize();
+
+#if defined(SETMEM)
   setMem<<<1, 1>>>(d_B, d_C, d_y, (const TTYPE **)d_BB, (TTYPE **)d_CC,
                    (TTYPE **)d_yy, ncol, nevt);
-#if defined(NEWSIGNATURE)
+  cudaDeviceSynchronize();
+#endif
+
+#if defined(NEWSIGNATURE_GEMV)
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemvbatched
-  cubstat = CUB_GEMV(handle, trans, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
+  cubstat = CUB_GEMV(handle, transn, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
                      (TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
+  cudaDeviceSynchronize();
 #elif defined(NEWSIGNATURE_GEMM)
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
   cubstat =
-      CUB_GEMV(handle, trans, trans, 1, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
+      CUB_GEMV(handle, transn, transn, 1, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
                (TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
-#else  // NEWSIGNATURE
+#else  // NEWSIGNATURE_GEMV
   int incx = 1, incy = 1;
-  cubstat = CUB_GEMV(handle, trans, nevt, ncol, &alpha, d_B, nevt, d_C, incx,
+  cubstat = CUB_GEMV(handle, transn, nevt, ncol, &alpha, d_B, nevt, d_C, incx,
                      &beta, d_y, incy);
-#endif // NEWSIGNATURE
+#endif // NEWSIGNATURE_GEMV
 
   time += t.GetDuration();
 
-  printMem<<<1, 1>>>(d_C, (TTYPE **)d_CC, nevt);
+  printMem<<<1, 1>>>(d_y, (TTYPE **)d_yy, nevt);
 
   return cubstat;
 }
@@ -152,7 +166,7 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 //
 int main() {
 
-  int nevt = 2;
+  int nevt = 1;
 
   cublasHandle_t handle;
   cudaError_t custat;
@@ -160,14 +174,15 @@ int main() {
   Timer<std::chrono::high_resolution_clock> t;
   float time = 0.;
 
-  int dsize = sizeof(TTYPE), vsize = dsize * medim, msize = vsize * medim,
-      mult_status = 0;
+  int psize = sizeof(TTYPE *), dsize = sizeof(TTYPE), vsize = dsize * medim,
+      msize = vsize * medim, mult_status = 0;
   const TTYPE *h_A = (TTYPE *)malloc(msize), // color matrix
       *h_B = (TTYPE *)malloc(vsize * nevt),  // jamps
       *d_A, *d_Br, *d_Bi, *d_BB, *tmp;
   TTYPE *h_C = (TTYPE *)malloc(vsize * nevt), // temp result
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
       *d_C, *d_CC, *d_y, *d_yy, me = 0, me2 = 0;
+  TTYPE **h_CC = new TTYPE *[nevt](); // initialize temp result
 
   //
   // prepare memory
@@ -178,9 +193,9 @@ int main() {
   custat = cudaMalloc((void **)&d_C, vsize * nevt);  // temp result
   custat = cudaMalloc((void **)&d_y, dsize * nevt);  // matrix elements
 
-  custat = cudaMalloc((void **)&d_BB, sizeof(TTYPE *) * nevt); // batch gemv
-  custat = cudaMalloc((void **)&d_CC, sizeof(TTYPE *) * nevt); // batch gemv
-  custat = cudaMalloc((void **)&d_yy, sizeof(TTYPE *) * nevt); // batch gemv
+  custat = cudaMalloc((void **)&d_BB, psize * nevt); // batch gemv
+  custat = cudaMalloc((void **)&d_CC, psize * nevt); // batch gemv
+  custat = cudaMalloc((void **)&d_yy, psize * nevt); // batch gemv
 
   memcpy((void *)h_A, &cf[0], msize);
   custat = cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
@@ -217,6 +232,8 @@ int main() {
   // }
   // std::cout << std::endl;
 
+  custat = cudaMemcpy((void *)d_CC, h_CC, psize * nevt, cudaMemcpyHostToDevice);
+
   //
   // conjugate if needed
   //
@@ -232,9 +249,11 @@ int main() {
   cublasCreate(&handle);
   mult_status = mult_cublas(handle, d_A, d_Br, d_C, d_y, d_BB, d_CC, d_yy,
                             dsize, time, nevt);
+  cudaDeviceSynchronize();
 
   // debug h_C
   // custat = cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
+  // std::cout << "host   h_C: ";
   // for (int i = 0; i < medim * nevt; ++i) {
   //   std::cout << h_C[i] << ", ";
   //   if ((i + 1) % medim == 0)
@@ -244,12 +263,26 @@ int main() {
 
   custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += h_y[0];
-  std::cout << h_y[0] << " - " << h_y[1] << std::endl;
+  for (int i = 0; i < nevt; ++i)
+    std::cout << "host   h_y, evt " << i << ": " << h_y[i] << std::endl;
   mult_status = mult_cublas(handle, d_A, d_Bi, d_C, d_y, d_BB, d_CC, d_yy,
                             dsize, time, nevt);
+  cudaDeviceSynchronize();
+
+  // debug h_C
+  // custat = cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
+  // std::cout << "host   h_C: ";
+  // for (int i = 0; i < medim * nevt; ++i) {
+  //   std::cout << h_C[i] << ", ";
+  //   if ((i + 1) % medim == 0)
+  //     std::cout << std::endl;
+  // }
+  // std::cout << std::endl;
+
   custat = cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   me += h_y[0];
-  std::cout << h_y[0] << " - " << h_y[1] << std::endl;
+  for (int i = 0; i < nevt; ++i)
+    std::cout << "host   h_y, evt " << i << ": " << h_y[i] << std::endl;
   std::cout << "cublas    : " << me << ", " << time << std::endl;
   cublasDestroy(handle);
 
