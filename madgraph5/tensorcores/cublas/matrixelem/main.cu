@@ -128,7 +128,8 @@ __global__ void printMem(TTYPE *d_y, TTYPE **d_yy, int nevt) {
 __global__ void printVar(const TTYPE *x) { printf("var: %f\n", x[0]); }
 
 __global__ void accVar(const TTYPE *d_BB, const TTYPE *d_CC) {
-  //  TTYPE **dd_BB = (TTYPE **)d_BB;
+  TTYPE **dd_BB = (TTYPE **)d_BB;
+  TTYPE **dd_CC = (TTYPE **)d_CC;
   printf("hello world\n");
 }
 
@@ -169,14 +170,14 @@ void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 #if defined(NEWSIGNATURE_GEMV)
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemvbatched
   accVar<<<1, 1>>>(d_BB, d_CC);
-  CUB_GEMV(handle, transn, 1, ncol, &alpha, (const TTYPE **)d_BB, ncol,
-           (const TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
+  CUB_GEMV(handle, transn, 1, ncol, &alpha, (const TTYPE **)d_BB, 1,
+           (const TTYPE **)d_CC, 1, &beta, (TTYPE **)d_yy, 1, nevt);
   cudaCheckError();
   cudaDeviceSynchronize();
   cudaCheckError();
 #elif defined(NEWSIGNATURE_GEMM)
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
-  CUB_GEMV(handle, transn, transn, 1, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
+  CUB_GEMV(handle, transn, transx, 1, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
            (TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
   cudaCheckError();
   cudaDeviceSynchronize();
@@ -201,7 +202,7 @@ void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 //
 int main() {
 
-  int nevt = 1;
+  int nevt = 8;
 
   cublasHandle_t handle;
 
