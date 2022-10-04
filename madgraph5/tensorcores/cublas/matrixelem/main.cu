@@ -1,4 +1,4 @@
-//#define DOUBLEPRECISION
+#define DOUBLEPRECISION
 //#define COMPLEXCONJUGATE
 
 #define NEWSIGNATURE_GEMV // <-- <-- <--
@@ -12,6 +12,7 @@
 #define SETMEM
 #define CUB_GEMV cublasDgemvBatched
 #elif defined(NEWSIGNATURE_GEMM)
+#define SETMEM
 #define CUB_GEMV cublasDgemmBatched
 #else
 #define CUB_GEMV cublasDgemv
@@ -25,6 +26,7 @@
 #define SETMEM
 #define CUB_GEMV cublasSgemvBatched
 #elif defined(NEWSIGNATURE_GEMM)
+#define SETMEM
 #define CUB_GEMV cublasSgemmBatched
 #else
 #define CUB_GEMV cublasSgemv
@@ -110,6 +112,13 @@ __global__ void printMem(TTYPE *d_y, TTYPE **d_yy, int nevt) {
   }
 }
 
+__global__ void printVar(const TTYPE *x) { printf("var: %f\n", x[0]); }
+
+__global__ void accVar(const TTYPE *d_BB, const TTYPE *d_CC) {
+  TTYPE **dd_BB = (TTYPE **)d_BB;
+  printf("hello world\n");
+}
+
 //
 // cublas implementation
 //
@@ -126,6 +135,8 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   int ncol = 24;
   TTYPE alpha = 1, beta = 0;
 
+  cudaDeviceSynchronize();
+
   t.Start();
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-symm
   cubstat = CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B,
@@ -140,8 +151,10 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 
 #if defined(NEWSIGNATURE_GEMV)
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemvbatched
-  cubstat = CUB_GEMV(handle, transn, 1, ncol, &alpha, (TTYPE **)d_BB, ncol,
-                     (TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
+  accVar<<<1, 1>>>(d_BB, d_CC);
+  cubstat =
+      CUB_GEMV(handle, transn, 1, ncol, &alpha, (const TTYPE **)d_BB, ncol,
+               (const TTYPE **)d_CC, ncol, &beta, (TTYPE **)d_yy, 1, nevt);
   cudaDeviceSynchronize();
 #elif defined(NEWSIGNATURE_GEMM)
   // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemmbatched
@@ -152,11 +165,12 @@ int mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   int incx = 1, incy = 1;
   cubstat = CUB_GEMV(handle, transn, nevt, ncol, &alpha, d_B, nevt, d_C, incx,
                      &beta, d_y, incy);
+  cudaDeviceSynchronize();
 #endif // NEWSIGNATURE_GEMV
 
   time += t.GetDuration();
 
-  printMem<<<1, 1>>>(d_y, (TTYPE **)d_yy, nevt);
+  printMem<<<1, 1>>>((TTYPE *)d_y, (TTYPE **)d_yy, nevt);
 
   return cubstat;
 }
