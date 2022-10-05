@@ -65,16 +65,19 @@ Matrices are (row/column) --> A (M/K), B(K/N), C(M/N)
 //
 // org implementation on host
 //
-TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp) {
+TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp, int nevt) {
   int ncolor = 24;
   TTYPE deltaME = 0;
-  for (int icol = 0; icol < ncolor; icol++) {
-    std::complex<TTYPE> ztemp;
-    for (int jcol = 0; jcol < ncolor; jcol++) {
-      ztemp += cf[icol * ncolor + jcol] * jamp[jcol];
+  for (int i = 0; i < nevt; ++i) {
+    deltaME = 0;
+    for (int icol = 0; icol < ncolor; icol++) {
+      std::complex<TTYPE> ztemp;
+      for (int jcol = 0; jcol < ncolor; jcol++) {
+        ztemp += cf[icol * ncolor + jcol] * jamp[jcol];
+      }
+      deltaME += (ztemp.real() * jamp[icol].real() +
+                  ztemp.imag() * jamp[icol].imag()); // / denom[icol];
     }
-    deltaME += (ztemp.real() * jamp[icol].real() +
-                ztemp.imag() * jamp[icol].imag()); // / denom[icol];
   }
   return deltaME;
 }
@@ -177,16 +180,25 @@ void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 
   time += t.GetDuration();
 
-  printMem<<<1, 1>>>((TTYPE *)d_y, (TTYPE **)d_yy, nevt);
+  // printMem<<<1, 1>>>((TTYPE *)d_y, (TTYPE **)d_yy, nevt);
   cudaCheckError();
+}
+
+void usage() {
+  std::cout << "./main #threads/block #blocks/grid" << std::endl;
+  exit(1);
 }
 
 //
 // main
 //
-int main() {
+int main(int argc, char **argv) {
 
-  int nevt = 1;
+  if (argc != 3)
+    usage();
+
+  int threads = std::stoi(argv[1]), blocks = std::stoi(argv[2]);
+  int nevt = threads * blocks;
 
   cublasHandle_t handle;
 
@@ -236,16 +248,6 @@ int main() {
   cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
   cudaCheckError();
 
-  // debug h_Br
-  // cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
-  // cudaCheckError();
-  // for (int i = 0; i < medim * nevt; ++i) {
-  //   std::cout << h_B[i] << ", ";
-  //   if ((i + 1) % medim == 0)
-  //     std::cout << std::endl;
-  // }
-  // std::cout << std::endl;
-
   tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
     memcpy((void *)tmp, &jamp0i[0], vsize);
@@ -253,16 +255,6 @@ int main() {
   }
   cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
   cudaCheckError();
-
-  // debug h_Bi
-  // cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
-  // cudaCheckError();
-  // for (int i = 0; i < medim * nevt; ++i) {
-  //   std::cout << h_B[i] << ", ";
-  //   if ((i + 1) % medim == 0)
-  //     std::cout << std::endl;
-  // }
-  // std::cout << std::endl;
 
   cudaMemcpy((void *)d_CC, h_CC, psize * nevt, cudaMemcpyHostToDevice);
   cudaCheckError();
@@ -282,42 +274,17 @@ int main() {
   //
   cublasCreate(&handle);
   cudaCheckError();
+
   mult_cublas(handle, d_A, d_Br, d_C, d_y, d_BB, d_CC, d_yy, dsize, time, nevt);
-
-  // debug h_C
-  // cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
-  // cudaCheckError();
-  // std::cout << "host   h_C: ";
-  // for (int i = 0; i < medim * nevt; ++i) {
-  //   std::cout << h_C[i] << ", ";
-  //   if ((i + 1) % medim == 0)
-  //     std::cout << std::endl;
-  // }
-  // std::cout << std::endl;
-
   cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   cudaCheckError();
   me += h_y[0];
-  for (int i = 0; i < nevt; ++i)
-    std::cout << "host   h_y, evt " << i << ": " << h_y[i] << std::endl;
   mult_cublas(handle, d_A, d_Bi, d_C, d_y, d_BB, d_CC, d_yy, dsize, time, nevt);
-
-  // debug h_C
-  // custat = cudaMemcpy(h_C, d_C, vsize * nevt, cudaMemcpyDeviceToHost);
-  // std::cout << "host   h_C: ";
-  // for (int i = 0; i < medim * nevt; ++i) {
-  //   std::cout << h_C[i] << ", ";
-  //   if ((i + 1) % medim == 0)
-  //     std::cout << std::endl;
-  // }
-  // std::cout << std::endl;
-
   cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   cudaCheckError();
   me += h_y[0];
-  for (int i = 0; i < nevt; ++i)
-    std::cout << "host   h_y, evt " << i << ": " << h_y[i] << std::endl;
   std::cout << "cublas    : " << me << ", " << time << std::endl;
+
   cublasDestroy(handle);
   cudaCheckError();
 
@@ -330,7 +297,7 @@ int main() {
   }
   time = 0.;
   t.Start();
-  me2 = mult_native_host(cf, jamp);
+  me2 = mult_native_host(cf, jamp, nevt);
   std::cout << "org host  : " << me2 << ", " << t.GetDuration() << std::endl;
 
   //
@@ -338,7 +305,7 @@ int main() {
   //
   time = 0.;
   t.Start();
-  mult_native_device<<<1, 1>>>(d_A, d_Br, d_Bi, d_y);
+  mult_native_device<<<threads, blocks>>>(d_A, d_Br, d_Bi, d_y);
   cudaCheckError();
   cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
   cudaCheckError();
