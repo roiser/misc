@@ -1,11 +1,11 @@
-CUDA_ARCH = 70 # 80
+CUDA_ARCH = 80
 ARCH = -arch sm_$(CUDA_ARCH)
 
 INCDIR = ../include
 HEADERS = $(INCDIR)/dev_array.h data.h hst_matrix.h kernel.h macros.h
 
 NVCC = nvcc
-CFLAGS = $(ARCH) -I $(INCDIR) -lcublas
+CFLAGS = $(ARCH) -I $(INCDIR) -lcublas -lnvToolsExt
 
 all: main
 
