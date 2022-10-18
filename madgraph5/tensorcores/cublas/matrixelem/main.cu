@@ -1,4 +1,31 @@
-//#define DOUBLEPRECISION
+#define DOUBLEPRECISION
+#define USE_NVTX
+
+#ifdef USE_NVTX
+#include "nvToolsExt.h"
+
+const uint32_t colors[] = {0xff00ff00, 0xff0000ff, 0xffffff00, 0xffff00ff,
+                           0xff00ffff, 0xffff0000, 0xffffffff, 0x00ffffff};
+const int num_colors = sizeof(colors) / sizeof(uint32_t);
+
+#define PUSH_RANGE(name, cid)                                                  \
+  {                                                                            \
+    int color_id = cid;                                                        \
+    color_id = color_id % num_colors;                                          \
+    nvtxEventAttributes_t eventAttrib = {0};                                   \
+    eventAttrib.version = NVTX_VERSION;                                        \
+    eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;                          \
+    eventAttrib.colorType = NVTX_COLOR_ARGB;                                   \
+    eventAttrib.color = colors[color_id];                                      \
+    eventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII;                         \
+    eventAttrib.message.ascii = name;                                          \
+    nvtxRangePushEx(&eventAttrib);                                             \
+  }
+#define POP_RANGE nvtxRangePop();
+#else
+#define PUSH_RANGE(name, cid)
+#define POP_RANGE
+#endif
 
 #if defined(DOUBLEPRECISION)
 #define TTYPE double
@@ -96,12 +123,16 @@ void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
 
   t.Start();
 
+  PUSH_RANGE("5 - cublas symv", 5)
   CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B, ncol, &beta,
            d_C, ncol);
+  POP_RANGE
   cudaCheckError();
 
+  PUSH_RANGE("6 - cublas gemv", 6)
   CUB_GEMV(handle, transn, 1, ncol, &alpha, (const TTYPE **)d_BB, 1,
            (const TTYPE **)d_CC, 1, &beta, (TTYPE **)d_yy, 1, nevt);
+  POP_RANGE
   cudaCheckError();
 
   time += t.GetDuration();
@@ -141,6 +172,7 @@ int main(int argc, char **argv) {
   //
   // prepare memory
   //
+  PUSH_RANGE("0 - cuda malloc memory", 0)
   cudaMalloc((void **)&d_A, msize); // color matrix
   cudaCheckError();
   cudaMalloc((void **)&d_Br, vsize * nevt); // jamps real
@@ -160,7 +192,9 @@ int main(int argc, char **argv) {
   cudaCheckError();
   cudaMalloc((void **)&d_yy, psize * nevt); // batch gemv
   cudaCheckError();
+  POP_RANGE
 
+  PUSH_RANGE("1 - copy memory", 1)
   memcpy((void *)h_A, &cf[0], msize);
   cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
   cudaCheckError();
@@ -184,16 +218,23 @@ int main(int argc, char **argv) {
   cudaMemcpy((void *)d_CC, h_CC, psize * nevt, cudaMemcpyHostToDevice);
   cudaCheckError();
 
+  POP_RANGE
+
   //
   // cublas
   //
+  PUSH_RANGE("2 - prepare cublas", 2)
   cublasCreate(&handle);
+  cudaCheckError();
+
+  cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH);
   cudaCheckError();
 
   setMem<<<1, 1>>>(d_Br, d_Bi, d_C, d_y, (const TTYPE **)d_BBr,
                    (const TTYPE **)d_BBi, (TTYPE **)d_CC, (TTYPE **)d_yy, ncol,
                    nevt);
   cudaCheckError();
+  POP_RANGE
 
   for (int i = 0; i < 10; ++i) {
     me = 0.;
@@ -217,6 +258,7 @@ int main(int argc, char **argv) {
   //
   // org on host
   //
+  PUSH_RANGE("3 - compute org on host", 3)
   std::complex<TTYPE> jamp[vsize];
   for (int i = 0; i < vsize; ++i) {
     jamp[i] = std::complex<TTYPE>(jamp0r[i], jamp0i[i]);
@@ -225,6 +267,7 @@ int main(int argc, char **argv) {
   t.Start();
   me2 = mult_native_host(cf, jamp, nevt);
   std::cout << "org host  : " << me2 << ", " << t.GetDuration() << std::endl;
+  POP_RANGE
 
   //
   // org on device
@@ -232,7 +275,9 @@ int main(int argc, char **argv) {
   for (int i = 0; i < 10; ++i) {
     time = 0.;
     t.Start();
+    PUSH_RANGE("4 - compute org on device", 4)
     mult_native_device<<<threads, blocks>>>(d_A, d_Br, d_Bi, d_y, ncol);
+    POP_RANGE
     cudaCheckError();
     time = t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
