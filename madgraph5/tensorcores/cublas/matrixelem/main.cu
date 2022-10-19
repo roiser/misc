@@ -1,4 +1,4 @@
-#define DOUBLEPRECISION
+//#define DOUBLEPRECISION
 #define USE_NVTX
 
 #ifdef USE_NVTX
@@ -47,7 +47,7 @@ const int num_colors = sizeof(colors) / sizeof(uint32_t);
     }                                                                          \
   }
 
-#include "data.h"
+#include "data_3g.h"
 #include "timer.h"
 
 using namespace mgOnGpu;
@@ -59,8 +59,8 @@ using namespace mgOnGpu;
 //
 // org implementation on host
 //
-TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp, int nevt) {
-  int ncolor = 24;
+TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp, int nevt,
+                       int ncolor) {
   TTYPE deltaME = 0;
   for (int i = 0; i < nevt; ++i) {
     deltaME = 0;
@@ -152,21 +152,22 @@ int main(int argc, char **argv) {
     usage();
 
   int threads = std::stoi(argv[1]), blocks = std::stoi(argv[2]);
-  int nevt = threads * blocks, ncol = 24;
+  int nevt = threads * blocks;
 
   cublasHandle_t handle;
 
   Timer<std::chrono::high_resolution_clock> t;
   float time = 0.;
 
-  int psize = sizeof(TTYPE *), dsize = sizeof(TTYPE), vsize = dsize * medim,
-      msize = vsize * medim;
-  const TTYPE *h_A = (TTYPE *)malloc(msize), // color matrix
-      *h_B = (TTYPE *)malloc(vsize * nevt),  // jamps
-      *d_A, *d_Br, *d_Bi, *d_BBr, *d_BBi, *tmp;
+  int psize = sizeof(TTYPE *), dsize = sizeof(TTYPE), vsize = dsize * ncol,
+      msize = vsize * ncol;
+  TTYPE *h_A = (TTYPE *)malloc(msize),           // color matrix
+      *h_Br = (TTYPE *)malloc(vsize * nevt),     // jamps
+          *h_Bi = (TTYPE *)malloc(vsize * nevt), // jamps
+      *d_A, *d_Br, *d_Bi, *d_BBr, *d_BBi;
   TTYPE *h_C = (TTYPE *)malloc(vsize * nevt), // temp result
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
-      *d_C, *d_CC, *d_y, *d_yy, me = 0, me2 = 0;
+      *d_C, *d_CC, *d_y, *d_yy, me = 0;
   TTYPE **h_CC = new TTYPE *[nevt](); // initialize temp result
 
   //
@@ -196,23 +197,22 @@ int main(int argc, char **argv) {
 
   PUSH_RANGE("1 - copy memory", 1)
   memcpy((void *)h_A, &cf[0], msize);
+  for (int i = 0; i < ncol * ncol; ++i) {
+    h_A[i] = (TTYPE)(h_A[i] / denom_s);
+  }
   cudaMemcpy((void *)d_A, h_A, msize, cudaMemcpyHostToDevice);
   cudaCheckError();
 
-  tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
-    memcpy((void *)tmp, &jamp0r[0], vsize);
-    tmp += 24;
+    memcpy((void *)&h_Br[i * ncol], &jamp0r[0], vsize);
   }
-  cudaMemcpy((void *)d_Br, h_B, vsize * nevt, cudaMemcpyHostToDevice);
+  cudaMemcpy((void *)d_Br, h_Br, vsize * nevt, cudaMemcpyHostToDevice);
   cudaCheckError();
 
-  tmp = h_B;
   for (int i = 0; i < nevt; ++i) {
-    memcpy((void *)tmp, &jamp0i[0], vsize);
-    tmp += 24;
+    memcpy((void *)&h_Bi[i * ncol], &jamp0i[0], vsize);
   }
-  cudaMemcpy((void *)d_Bi, h_B, vsize * nevt, cudaMemcpyHostToDevice);
+  cudaMemcpy((void *)d_Bi, h_Bi, vsize * nevt, cudaMemcpyHostToDevice);
   cudaCheckError();
 
   cudaMemcpy((void *)d_CC, h_CC, psize * nevt, cudaMemcpyHostToDevice);
@@ -227,8 +227,8 @@ int main(int argc, char **argv) {
   cublasCreate(&handle);
   cudaCheckError();
 
-  cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH);
-  cudaCheckError();
+  // cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH);
+  // cudaCheckError();
 
   setMem<<<1, 1>>>(d_Br, d_Bi, d_C, d_y, (const TTYPE **)d_BBr,
                    (const TTYPE **)d_BBi, (TTYPE **)d_CC, (TTYPE **)d_yy, ncol,
@@ -258,16 +258,16 @@ int main(int argc, char **argv) {
   //
   // org on host
   //
-  PUSH_RANGE("3 - compute org on host", 3)
-  std::complex<TTYPE> jamp[vsize];
-  for (int i = 0; i < vsize; ++i) {
-    jamp[i] = std::complex<TTYPE>(jamp0r[i], jamp0i[i]);
-  }
-  time = 0.;
-  t.Start();
-  me2 = mult_native_host(cf, jamp, nevt);
-  std::cout << "org host  : " << me2 << ", " << t.GetDuration() << std::endl;
-  POP_RANGE
+  // PUSH_RANGE("3 - compute org on host", 3)
+  // std::complex<TTYPE> jamp[vsize];
+  // for (int i = 0; i < vsize; ++i) {
+  //   jamp[i] = std::complex<TTYPE>(jamp0r[i], jamp0i[i]);
+  // }
+  // time = 0.;
+  // t.Start();
+  // me = mult_native_host(cf, jamp, nevt, ncol);
+  // std::cout << "org host  : " << me << ", " << t.GetDuration() << std::endl;
+  // POP_RANGE
 
   //
   // org on device
