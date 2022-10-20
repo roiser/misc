@@ -1,4 +1,4 @@
-//#define DOUBLEPRECISION
+#define DOUBLEPRECISION
 #define USE_NVTX
 
 #ifdef USE_NVTX
@@ -29,17 +29,17 @@ const int num_colors = sizeof(colors) / sizeof(uint32_t);
 
 #if defined(DOUBLEPRECISION)
 #define TTYPE double
-#define CUB_SYMV cublasDsymm
+#define CUB_SYMM cublasDsymm
 #define CUB_GEMV cublasDgemvBatched
 #else // DOUBLEPRECISION
 #define TTYPE float
-#define CUB_SYMV cublasSsymm
+#define CUB_SYMM cublasSsymm
 #define CUB_GEMV cublasSgemvBatched
 #endif // DOUBLEPRECISION
 
 #define cudaCheckError()                                                       \
   {                                                                            \
-    cudaError_t e = cudaGetLastError();                                        \
+    cudaError_t e = cudaDeviceSynchronize();                                   \
     if (e != cudaSuccess) {                                                    \
       printf("Cuda error %s:%d: '%s'\n", __FILE__, __LINE__,                   \
              cudaGetErrorString(e));                                           \
@@ -117,25 +117,17 @@ void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const TTYPE *d_B,
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
   cublasOperation_t transn = CUBLAS_OP_N;
-
-  Timer<std::chrono::high_resolution_clock> t;
   TTYPE alpha = 1, beta = 0;
 
-  t.Start();
-
   PUSH_RANGE("5 - cublas symv", 5)
-  CUB_SYMV(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B, ncol, &beta,
+  CUB_SYMM(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B, ncol, &beta,
            d_C, ncol);
   POP_RANGE
-  cudaCheckError();
 
   PUSH_RANGE("6 - cublas gemv", 6)
   CUB_GEMV(handle, transn, 1, ncol, &alpha, (const TTYPE **)d_BB, 1,
            (const TTYPE **)d_CC, 1, &beta, (TTYPE **)d_yy, 1, nevt);
   POP_RANGE
-  cudaCheckError();
-
-  time += t.GetDuration();
 }
 
 void usage() {
@@ -157,7 +149,7 @@ int main(int argc, char **argv) {
   cublasHandle_t handle;
 
   Timer<std::chrono::high_resolution_clock> t;
-  float time = 0.;
+  float time = 0., time2 = 0.;
 
   int psize = sizeof(TTYPE *), dsize = sizeof(TTYPE), vsize = dsize * ncol,
       msize = vsize * ncol;
@@ -169,6 +161,11 @@ int main(int argc, char **argv) {
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
       *d_C, *d_CC, *d_y, *d_yy, me = 0;
   TTYPE **h_CC = new TTYPE *[nevt](); // initialize temp result
+
+  std::cout << "sizes: " << std::endl
+            << "h_A: " << sizeof(*h_A) << std::endl
+            << "h_Br: " << sizeof(h_Br) << std::endl
+            << "h_C: " << sizeof(h_C) << std::endl;
 
   //
   // prepare memory
@@ -227,8 +224,11 @@ int main(int argc, char **argv) {
   cublasCreate(&handle);
   cudaCheckError();
 
-  // cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH);
-  // cudaCheckError();
+  cublasSetMathMode(handle,
+                    CUBLAS_TF32_TENSOR_OP_MATH); // CUBLAS_TENSOR_OP_MATH);
+  cudaCheckError();
+  cublasSetAtomicsMode(handle, CUBLAS_ATOMICS_ALLOWED);
+  cudaCheckError();
 
   setMem<<<1, 1>>>(d_Br, d_Bi, d_C, d_y, (const TTYPE **)d_BBr,
                    (const TTYPE **)d_BBi, (TTYPE **)d_CC, (TTYPE **)d_yy, ncol,
@@ -238,18 +238,23 @@ int main(int argc, char **argv) {
 
   for (int i = 0; i < 10; ++i) {
     me = 0.;
-    time = 0.;
+    time = 0., time2 = 0.;
+    t.Start();
     mult_cublas(handle, d_A, d_Br, d_C, d_y, d_BBr, d_CC, d_yy, dsize, time,
                 ncol, nevt);
+    time2 += t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
     me += h_y[0];
+    t.Start();
     mult_cublas(handle, d_A, d_Bi, d_C, d_y, d_BBi, d_CC, d_yy, dsize, time,
                 ncol, nevt);
+    cudaDeviceSynchronize();
+    time2 += t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
     me += h_y[0];
-    std::cout << "cublas    : " << me << ", " << time << std::endl;
+    std::cout << "cublas    : " << me << ", " << time2 << std::endl;
   }
 
   cublasDestroy(handle);
@@ -276,9 +281,9 @@ int main(int argc, char **argv) {
     time = 0.;
     t.Start();
     PUSH_RANGE("4 - compute org on device", 4)
-    mult_native_device<<<threads, blocks>>>(d_A, d_Br, d_Bi, d_y, ncol);
+    mult_native_device<<<blocks, threads>>>(d_A, d_Br, d_Bi, d_y, ncol);
     POP_RANGE
-    cudaCheckError();
+    cudaDeviceSynchronize();
     time = t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
