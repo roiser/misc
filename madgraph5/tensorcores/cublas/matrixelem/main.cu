@@ -1,4 +1,4 @@
-#define DOUBLEPRECISION
+//#define DOUBLEPRECISION
 #define USE_NVTX
 
 #ifdef USE_NVTX
@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
   cublasHandle_t handle;
 
   Timer<std::chrono::high_resolution_clock> t;
-  float time = 0., time2 = 0.;
+  float time = 0.;
 
   int psize = sizeof(TTYPE *), dsize = sizeof(TTYPE), vsize = dsize * ncol,
       msize = vsize * ncol;
@@ -161,11 +161,6 @@ int main(int argc, char **argv) {
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
       *d_C, *d_CC, *d_y, *d_yy, me = 0;
   TTYPE **h_CC = new TTYPE *[nevt](); // initialize temp result
-
-  std::cout << "sizes: " << std::endl
-            << "h_A: " << sizeof(*h_A) << std::endl
-            << "h_Br: " << sizeof(h_Br) << std::endl
-            << "h_C: " << sizeof(h_C) << std::endl;
 
   //
   // prepare memory
@@ -224,8 +219,8 @@ int main(int argc, char **argv) {
   cublasCreate(&handle);
   cudaCheckError();
 
-  cublasSetMathMode(handle,
-                    CUBLAS_TF32_TENSOR_OP_MATH); // CUBLAS_TENSOR_OP_MATH);
+  cublasSetMathMode(handle, CUBLAS_TF32_TENSOR_OP_MATH);
+  // or - deprecated - CUBLAS_TENSOR_OP_MATH);
   cudaCheckError();
   cublasSetAtomicsMode(handle, CUBLAS_ATOMICS_ALLOWED);
   cudaCheckError();
@@ -238,11 +233,11 @@ int main(int argc, char **argv) {
 
   for (int i = 0; i < 10; ++i) {
     me = 0.;
-    time = 0., time2 = 0.;
+    time = 0.;
     t.Start();
     mult_cublas(handle, d_A, d_Br, d_C, d_y, d_BBr, d_CC, d_yy, dsize, time,
                 ncol, nevt);
-    time2 += t.GetDuration();
+    time += t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
     me += h_y[0];
@@ -250,11 +245,11 @@ int main(int argc, char **argv) {
     mult_cublas(handle, d_A, d_Bi, d_C, d_y, d_BBi, d_CC, d_yy, dsize, time,
                 ncol, nevt);
     cudaDeviceSynchronize();
-    time2 += t.GetDuration();
+    time += t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
     me += h_y[0];
-    std::cout << "cublas    : " << me << ", " << time2 << std::endl;
+    std::cout << "cublas    : " << me << ", " << time << std::endl;
   }
 
   cublasDestroy(handle);
