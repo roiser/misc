@@ -54,6 +54,7 @@ using namespace mgOnGpu;
 
 #include <complex>
 #include <cublas_v2.h>
+#include <iomanip>
 #include <iostream>
 
 //
@@ -162,6 +163,9 @@ int main(int argc, char **argv) {
       *d_C, *d_CC, *d_y, *d_yy, me = 0;
   TTYPE **h_CC = new TTYPE *[nevt](); // initialize temp result
 
+  std::cout << "i version     result       duration" << std::endl
+            << "-----------------------------------" << std::endl;
+
   //
   // prepare memory
   //
@@ -249,7 +253,8 @@ int main(int argc, char **argv) {
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
     me += h_y[0];
-    std::cout << "cublas    : " << me << ", " << time << std::endl;
+    std::cout << std::left << std::setw(2) << i << std::setw(12) << "cublas"
+              << std::setw(13) << me << time << std::endl;
   }
 
   cublasDestroy(handle);
@@ -266,7 +271,8 @@ int main(int argc, char **argv) {
   // time = 0.;
   // t.Start();
   // me = mult_native_host(cf, jamp, nevt, ncol);
-  // std::cout << "org host  : " << me << ", " << t.GetDuration() << std::endl;
+  // std::cout << std::left << std::setw(14) << "org host" << std::setw(13) <<
+  // me << t.GetDuration() << std::endl;
   // POP_RANGE
 
   //
@@ -282,7 +288,8 @@ int main(int argc, char **argv) {
     time = t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
-    std::cout << "org device: " << *h_y << ", " << time << std::endl;
+    std::cout << std::left << std::setw(2) << i << std::setw(12) << "org device"
+              << std::setw(13) << *h_y << time << std::endl;
   }
 
   return 0;
