@@ -84,7 +84,8 @@ class prof():
         ax2.set_ylabel('factor (N)')
         ax2.bar(range(len(xdata)), bar_factors, label=bar_labels, color=bar_colors)
         h,l = ax2.get_legend_handles_labels()
-        ax2.legend(h, ['original(s)/cublas(s)', 'cublas(s)/original(s)'], loc='upper right')
+        l = list(map(lambda x: x.replace('cublas', 'cublas factor N better').replace('original', 'original factor N better'), l))
+        ax2.legend(h, l, loc='upper right')
         ax2.set_xticks(range(len(xdata)), xdata, fontsize=8, rotation=66)
 
         fig.subplots_adjust(hspace=0)
