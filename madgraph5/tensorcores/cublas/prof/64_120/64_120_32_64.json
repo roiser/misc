@@ -1,0 +1,17 @@
+{
+  "precision": 64,
+  "numevents": 2048,
+  "numcolors": 120,
+  "numblocks": 64,
+  "numthreads": 32,
+  "cublas": {
+    "avg": 7.25104e-05,
+    "min": 5.296e-05,
+    "max": 0.000225291
+  },
+  "device": {
+    "avg": 0.000932791,
+    "min": 0.000928845,
+    "max": 0.000964825
+  }
+}
