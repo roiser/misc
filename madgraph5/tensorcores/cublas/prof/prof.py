@@ -68,13 +68,15 @@ class prof():
             yorg.append(oravg)
 
         fig = plt.figure()
+        fig.set_figheight(6)
         #fig, (ax,ax2) = plt.subplots(2)
-        ax = fig.add_subplot(1, 1, 1)
+        ax = fig.add_subplot(2, 1, 1)
         ax.plot(range(len(xdata)), ycub, color='tab:blue', label='cublas')
         ax.plot(range(len(xdata)), yorg, color='tab:orange', label='original')
 
         plt.yscale('log')
-        plt.xticks(range(len(xdata)), xdata, rotation=45)
+        plt.xticks(range(len(xdata)), xdata, fontsize=8, rotation=66)
+        ax.set_xlabel("va=top, ha=left")
         plt.legend(loc="upper left")
         plt.xlabel('gridsize (#events)')
         plt.ylabel('runtime (seconds)')
@@ -83,21 +85,15 @@ class prof():
         if self.raw[0]['precision'] == 64:
             prec = 'double'
         numcol = str(self.raw[0]['numcolors'])
-
         ax.set_title('color matrix (%sx%s), %s precision' % (numcol, numcol, prec))
 
-        plt.show()
-
-        fig2, ax2 = plt.subplots()
-
-        plt.xticks(range(len(xdata)), xdata, rotation=45)
-
+        ax2 = fig.add_subplot(2,1,2, sharex=ax)
         ax2.bar(range(len(xdata)), bar_factors, label=bar_labels, color=bar_colors)
-
         ax2.set_ylabel('factor (N)')
-        #ax2.set_xlabel('gridsize (#events)')
-        #ax2.set_title('Factors faster')
-        #ax2.legend(title='')
+        plt.xticks(range(len(xdata)), xdata, fontsize=8, rotation=66)
+        plt.xlabel('gridsize (#events)')
+
+        fig.tight_layout(pad=1.0)
 
         plt.show()
 
