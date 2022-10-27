@@ -67,34 +67,27 @@ class prof():
             ycub.append(cuavg)
             yorg.append(oravg)
 
-        fig = plt.figure()
-        fig.set_figheight(6)
-        #fig, (ax,ax2) = plt.subplots(2)
-        ax = fig.add_subplot(2, 1, 1)
-        ax.plot(range(len(xdata)), ycub, color='tab:blue', label='cublas')
-        ax.plot(range(len(xdata)), yorg, color='tab:orange', label='original')
-
-        plt.yscale('log')
-        plt.xticks(range(len(xdata)), xdata, fontsize=8, rotation=66)
-        ax.set_xlabel("va=top, ha=left")
-        plt.legend(loc="upper left")
-        plt.xlabel('gridsize (#events)')
-        plt.ylabel('runtime (seconds)')
-
         prec = 'single'
         if self.raw[0]['precision'] == 64:
             prec = 'double'
         numcol = str(self.raw[0]['numcolors'])
-        ax.set_title('color matrix (%sx%s), %s precision' % (numcol, numcol, prec))
 
-        ax2 = fig.add_subplot(2,1,2, sharex=ax)
-        ax2.bar(range(len(xdata)), bar_factors, label=bar_labels, color=bar_colors)
+        fig, (ax1, ax2) = plt.subplots(2, 1, height_ratios=[3, 1], sharex=True)
+        ax1.set_title('color matrix (%sx%s), %s precision' % (numcol, numcol, prec))
+        ax1.plot(range(len(xdata)), ycub, color='tab:blue', label='cublas')
+        ax1.plot(range(len(xdata)), yorg, color='tab:orange', label='original')
+        ax1.set_yscale('log')
+        ax1.set_ylabel('runtime (seconds)')
+        ax1.legend(loc="upper left")
+
+        ax2.set_xlabel('gridsize (#events)')
         ax2.set_ylabel('factor (N)')
-        plt.xticks(range(len(xdata)), xdata, fontsize=8, rotation=66)
-        plt.xlabel('gridsize (#events)')
+        ax2.bar(range(len(xdata)), bar_factors, label=bar_labels, color=bar_colors)
+        h,l = ax2.get_legend_handles_labels()
+        ax2.legend(h, ['original(s)/cublas(s)', 'cublas(s)/original(s)'], loc='upper right')
+        ax2.set_xticks(range(len(xdata)), xdata, fontsize=8, rotation=66)
 
-        fig.tight_layout(pad=1.0)
-
+        fig.subplots_adjust(hspace=0)
         plt.show()
 
 
