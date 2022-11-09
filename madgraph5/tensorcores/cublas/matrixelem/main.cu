@@ -1,4 +1,4 @@
-//#define DOUBLEPRECISION
+#define DOUBLEPRECISION
 #define USE_NVTX
 
 #ifdef USE_NVTX
@@ -47,15 +47,21 @@ const int num_colors = sizeof(colors) / sizeof(uint32_t);
     }                                                                          \
   }
 
-#include "data_3g.h"
+//#include "data_3g.h"
+#include "data.h"
 #include "timer.h"
 
 using namespace mgOnGpu;
 
+#include <algorithm>
 #include <complex>
 #include <cublas_v2.h>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
+#include <ranges>
+#include <vector>
 
 //
 // org implementation on host
@@ -136,6 +142,39 @@ void usage() {
   exit(1);
 }
 
+void make_json(const std::vector<float> &cublas_t,
+               const std::vector<float> &device_t, int ncol, int nevt,
+               int threads, int blocks) {
+  std::ofstream json;
+  int singledouble = 32;
+#if defined(DOUBLEPRECISION)
+  singledouble = 64;
+#endif
+  std::string filename = std::to_string(singledouble) + "_" +
+                         std::to_string(ncol) + "_" + std::to_string(threads) +
+                         "_" + std::to_string(blocks) + ".json";
+  json.open(filename);
+  // clang-format off
+  json << "{" << std::endl
+       << "  \"precision\": " << singledouble << "," << std::endl
+       << "  \"numevents\": " << nevt << "," << std::endl
+       << "  \"numcolors\": " << ncol << "," << std::endl
+       << "  \"numblocks\": " << blocks << "," << std::endl
+       << "  \"numthreads\": " << threads << "," << std::endl
+       << "  \"cublas\": {" << std::endl
+       << "    \"avg\": " << std::reduce(cublas_t.begin(), cublas_t.end(), 0.0) / cublas_t.size() << "," << std::endl
+       << "    \"min\": " << *std::min_element(cublas_t.begin(), cublas_t.end()) << "," << std::endl
+       << "    \"max\": " << *std::max_element(cublas_t.begin(), cublas_t.end()) << std::endl
+       << "  }," << std::endl
+       << "  \"device\": {" << std::endl
+       << "    \"avg\": " << std::reduce(device_t.begin(), device_t.end(), 0.0) / device_t.size() << "," << std::endl
+       << "    \"min\": " << *std::min_element(device_t.begin(), device_t.end()) << "," << std::endl
+       << "    \"max\": " << *std::max_element(device_t.begin(), device_t.end()) << std::endl
+       << "  }" << std::endl
+       << "}" << std::endl;
+  // clang-format on
+}
+
 //
 // main
 //
@@ -153,7 +192,7 @@ int main(int argc, char **argv) {
   float time = 0.;
 
   int psize = sizeof(TTYPE *), dsize = sizeof(TTYPE), vsize = dsize * ncol,
-      msize = vsize * ncol;
+      msize = vsize * ncol, niter = 10;
   TTYPE *h_A = (TTYPE *)malloc(msize),           // color matrix
       *h_Br = (TTYPE *)malloc(vsize * nevt),     // jamps
           *h_Bi = (TTYPE *)malloc(vsize * nevt), // jamps
@@ -162,6 +201,8 @@ int main(int argc, char **argv) {
       *h_y = (TTYPE *)malloc(dsize * nevt),   // matrix elements
       *d_C, *d_CC, *d_y, *d_yy, me = 0;
   TTYPE **h_CC = new TTYPE *[nevt](); // initialize temp result
+
+  std::vector<float> cublas_t, device_t;
 
   std::cout << "i version     result       duration" << std::endl
             << "-----------------------------------" << std::endl;
@@ -235,7 +276,7 @@ int main(int argc, char **argv) {
   cudaCheckError();
   POP_RANGE
 
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < niter; ++i) {
     me = 0.;
     time = 0.;
     t.Start();
@@ -253,6 +294,7 @@ int main(int argc, char **argv) {
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
     me += h_y[0];
+    cublas_t.push_back(time);
     std::cout << std::left << std::setw(2) << i << std::setw(12) << "cublas"
               << std::setw(13) << me << time << std::endl;
   }
@@ -278,7 +320,7 @@ int main(int argc, char **argv) {
   //
   // org on device
   //
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < niter; ++i) {
     time = 0.;
     t.Start();
     PUSH_RANGE("4 - compute org on device", 4)
@@ -288,9 +330,12 @@ int main(int argc, char **argv) {
     time = t.GetDuration();
     cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost);
     cudaCheckError();
+    device_t.push_back(time);
     std::cout << std::left << std::setw(2) << i << std::setw(12) << "org device"
               << std::setw(13) << *h_y << time << std::endl;
   }
+
+  make_json(cublas_t, device_t, ncol, nevt, threads, blocks);
 
   return 0;
 }
