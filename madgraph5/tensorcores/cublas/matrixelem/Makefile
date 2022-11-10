@@ -23,6 +23,6 @@ profile: debug
 	$(NVCC) $(CFLAGS) -o $@ $<
 
 clean:
-	rm -f main
+	rm -f main main_cx main_full
 
 # nvcc -arch sm_80 -I /p/home/jusers/roiser1/juwels/usr/local/include ampere_tf32_tensorop_gemm.cu
