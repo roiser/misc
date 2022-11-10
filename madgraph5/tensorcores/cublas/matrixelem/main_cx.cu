@@ -1,8 +1,6 @@
 #define DOUBLEPRECISION
 #define USE_NVTX
 
-using namespace mgOnGpu;
-
 #include <algorithm>
 #include <complex>
 #include <fstream>
@@ -17,23 +15,14 @@ using namespace mgOnGpu;
 
 #include "gpu_common.h"
 #include "helpers.h"
+#include "macros_cx.h"
 #include "matmult.h"
 #include "timer.h"
 
 #include "data.h"
 //#include "data_3g.h"
 
-#if defined(DOUBLEPRECISION)
-#define CTYPE cuDoubleComplex
-#define TTYPE double
-#define CUB_SYMM cublasZsymm
-#define CUB_GEMV cublasZgemvBatched
-#else // DOUBLEPRECISION
-#define CTYPE cuComplex
-#define TTYPE float
-#define CUB_SYMM cublasCsymm
-#define CUB_GEMV cublasCgemvBatched
-#endif // DOUBLEPRECISION
+using namespace mgOnGpu;
 
 //
 // main
@@ -87,7 +76,7 @@ int main(int argc, char **argv) {
 
   CTYPE jamp0[ncol];
   for (int i = 0; i < ncol; ++i) {
-    jamp[i] = CTYPE(jamp0r[i], jamp0i[i]);
+    jamp0[i] = CX_MK(jamp0r[i], jamp0i[i]);
   }
   for (int i = 0; i < nevt; ++i) {
     memcpy((void *)&h_B[i * ncol], &jamp0[0], vsize);
@@ -106,22 +95,22 @@ int main(int argc, char **argv) {
   // or - deprecated - CUBLAS_TENSOR_OP_MATH);
   cubCheck(cublasSetAtomicsMode(handle, CUBLAS_ATOMICS_ALLOWED));
 
-  setMem<<<1, 1>>>(d_B, d_C, d_y, (const TTYPE **)d_BBr, (const TTYPE **)d_BBi,
-                   (TTYPE **)d_CC, (TTYPE **)d_yy, ncol, nevt);
+  setMem<<<1, 1>>>(d_B, d_C, d_y, (const CTYPE **)d_BB, (CTYPE **)d_CC,
+                   (TTYPE **)d_yy, ncol, nevt);
   POP_RANGE
 
   for (int i = 0; i < niter; ++i) {
     me = 0.;
     time = 0.;
     t.Start();
-    mult_cublas(handle, d_A, d_Br, d_C, d_y, d_BBr, d_CC, d_yy, dsize, time,
-                ncol, nevt);
+    mult_cublas(handle, d_A, d_B, d_C, d_y, d_BB, d_CC, d_yy, dsize, time, ncol,
+                nevt);
     time += t.GetDuration();
     cuCheck(cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost));
     me += h_y[0];
     t.Start();
-    mult_cublas(handle, d_A, d_Bi, d_C, d_y, d_BBi, d_CC, d_yy, dsize, time,
-                ncol, nevt);
+    mult_cublas(handle, d_A, d_B, d_C, d_y, d_BB, d_CC, d_yy, dsize, time, ncol,
+                nevt);
     cudaDeviceSynchronize();
     time += t.GetDuration();
     cuCheck(cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost));
@@ -155,7 +144,7 @@ int main(int argc, char **argv) {
     time = 0.;
     t.Start();
     PUSH_RANGE("4 - compute org on device", 4)
-    mult_native_device<<<blocks, threads>>>(d_A, d_Br, d_Bi, d_y, ncol);
+    mult_native_device<<<blocks, threads>>>(d_A, d_B, d_y, ncol);
     POP_RANGE
     cudaDeviceSynchronize();
     time = t.GetDuration();
