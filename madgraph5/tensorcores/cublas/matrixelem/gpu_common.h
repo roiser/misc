@@ -1,3 +1,6 @@
+#ifndef GPU_COMMON_H
+#define GPU_COMMON_H
+
 #ifdef USE_NVTX
 #include "nvToolsExt.h"
 
@@ -89,3 +92,5 @@ inline void gpuAssert(cublasStatus_t code, const char *file, int line,
       exit(code);
   }
 }
+
+#endif // GPU_COMMON_H

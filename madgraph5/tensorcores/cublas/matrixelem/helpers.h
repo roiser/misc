@@ -1,3 +1,6 @@
+#ifndef HELPERS_H
+#define HELPERS_H
+
 void usage() {
   std::cout << "./main #threads/block #blocks/grid" << std::endl;
   exit(1);
@@ -35,3 +38,5 @@ void make_json(const std::vector<float> &cublas_t,
        << "}" << std::endl;
   // clang-format on
 }
+
+#endif // HELPERS_H

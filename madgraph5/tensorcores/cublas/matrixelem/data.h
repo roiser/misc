@@ -1,5 +1,5 @@
-#ifndef me_data_h
-#define me_data_h 1
+#ifndef DATA_H
+#define DATA_H
 
 constexpr int ncol = 24;
 constexpr int cfmat = ncol * ncol;
@@ -133,4 +133,4 @@ TTYPE me0 = 0.0002525903368455499, me1 = 5.0765885218360435e-06,
 //  -0.20494943+0.48317812j  0.15706263-0.25097362j  0.55385715+0.10038817j
 //  -0.83879788+0.23479339j -0.05738818+0.52029712j  0.37899314+0.42672487j
 
-#endif // me_data_h
+#endif // DATA_H

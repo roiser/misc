@@ -1,5 +1,5 @@
-#ifndef kernel_h
-#define kernel_h
+#ifndef KERNEL_H
+#define KERNEL_H
 
 #include "macros.h"
 
@@ -47,4 +47,4 @@ __global__ void mmult(const double *A, const double *B, double *C) {
   mult2<m, n, k>(A, B, C);
 }
 
-#endif // kernel_h
+#endif // KERNEL_H

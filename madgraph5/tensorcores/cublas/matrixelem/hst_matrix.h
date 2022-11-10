@@ -1,5 +1,5 @@
-#ifndef hst_matrix_h
-#define hst_matrix_h
+#ifndef HST_MATRIX_H
+#define HST_MATRIX_H
 
 #include "data.h"
 #include "macros.h"
@@ -92,4 +92,4 @@ void print(double A[], double B[], double C[], const int a_rdm, const int a_cdm,
   cout << endl;
 }
 
-#endif // hst_matrix_h
+#endif // HST_MATRIX_H

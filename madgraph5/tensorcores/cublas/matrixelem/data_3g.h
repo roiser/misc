@@ -1,5 +1,5 @@
-#ifndef me_data_ggtggg_h
-#define me_data_ggtggg_h 1
+#ifndef DATA_3G_H
+#define DATA_3G_H
 
 constexpr int ncol = 120;
 constexpr int cfmat = ncol * ncol;
@@ -1289,4 +1289,4 @@ TTYPE jamp0i[ncol] = {
 
 // result: 1.0555375612e-06
 
-#endif // me_data_ggtggg_h
+#endif // DATA_3G_H

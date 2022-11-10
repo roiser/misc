@@ -1,5 +1,5 @@
-#ifndef macros_h
-#define macros_h
+#ifndef MACROS_H
+#define MACROS_H
 
 #define A_is_row_major
 #define B_is_row_major
@@ -32,4 +32,4 @@
 #define _B_idx_ i
 #endif
 
-#endif // macros_h
+#endif // MACROS_H
