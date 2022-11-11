@@ -1,5 +1,6 @@
 #define DOUBLEPRECISION
 #define USE_NVTX
+#define THREEGS
 
 #ifdef USE_NVTX
 #include "nvToolsExt.h"
@@ -47,8 +48,11 @@ const int num_colors = sizeof(colors) / sizeof(uint32_t);
     }                                                                          \
   }
 
-//#include "data_3g.h"
+#if defined(THREEGS)
+#include "data_3g.h"
+#else
 #include "data.h"
+#endif // THREEGS
 #include "timer.h"
 
 using namespace mgOnGpu;
