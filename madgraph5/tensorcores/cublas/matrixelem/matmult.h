@@ -16,8 +16,8 @@ TTYPE mult_native_host(TTYPE *cf, std::complex<TTYPE> *jamp, int nevt,
       for (int jcol = 0; jcol < ncolor; jcol++) {
         ztemp += cf[icol * ncolor + jcol] * jamp[jcol];
       }
-      deltaME += (ztemp.real() * jamp[icol].real() +
-                  ztemp.imag() * jamp[icol].imag()); // / denom[icol];
+      deltaME +=
+          (ztemp.real() * jamp[icol].real() + ztemp.imag() * jamp[icol].imag());
     }
   }
   return deltaME;
@@ -37,7 +37,7 @@ __global__ void mult_native_device(const TTYPE *cf, const CTYPE *jamp,
           CX_ADD(ztemp, CX_MUL(CX_MK(cf[icol * ncol + jcol], 0), jamp[jcol]));
     }
     *deltaME += (CX_REAL(ztemp) * CX_REAL(jamp[icol]) +
-                 CX_IMAG(ztemp) * CX_IMAG(jamp[icol])); // / denom[icol];
+                 CX_IMAG(ztemp) * CX_IMAG(jamp[icol])); //
   }
 }
 
@@ -64,7 +64,7 @@ void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const CTYPE *d_B,
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
   cublasOperation_t transn = CUBLAS_OP_N;
-  TTYPE alpha = 1, beta = 0;
+  CTYPE alpha = CX_MK(1, 0), beta = CX_MK(0, 0);
 
   PUSH_RANGE("5 - cublas symv", 5)
   cubCheck(CUB_SYMM(handle, side, uplo, ncol, nevt, &alpha, d_A, ncol, d_B,
@@ -72,8 +72,8 @@ void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const CTYPE *d_B,
   POP_RANGE
 
   PUSH_RANGE("6 - cublas gemv", 6)
-  cubCheck(CUB_GEMV(handle, transn, 1, ncol, &alpha, (const TTYPE **)d_BB, 1,
-                    (const TTYPE **)d_CC, 1, &beta, (TTYPE **)d_yy, 1, nevt));
+  cubCheck(CUB_GEMV(handle, transn, 1, ncol, &alpha, (const CTYPE **)d_BB, 1,
+                    (const CTYPE **)d_CC, 1, &beta, (CTYPE **)d_yy, 1, nevt));
   POP_RANGE
 }
 
