@@ -1,9 +1,8 @@
 #ifndef HELPERS_H
 #define HELPERS_H
 
-void make_json(const std::vector<float> &cublas_t,
-               const std::vector<float> &device_t, int ncol, int nevt,
-               int threads, int blocks) {
+void make_json(const std::vector<float> &cub_t, const std::vector<float> &dev_t,
+               int ncol, int nevt, int threads, int blocks) {
   std::ofstream json;
   int singledouble = 32;
 #if defined(DOUBLEPRECISION)
@@ -13,7 +12,12 @@ void make_json(const std::vector<float> &cublas_t,
                          std::to_string(ncol) + "_" + std::to_string(threads) +
                          "_" + std::to_string(blocks) + ".json";
   json.open(filename);
-  // clang-format off
+  double cuavg = std::reduce(cub_t.begin(), cub_t.end(), 0.0) / cub_t.size(),
+         cumin = *std::min_element(cub_t.begin(), cub_t.end()),
+         cumax = *std::max_element(cub_t.begin(), cub_t.end()),
+         oravg = std::reduce(dev_t.begin(), dev_t.end(), 0.0) / dev_t.size(),
+         ormin = *std::min_element(dev_t.begin(), dev_t.end()),
+         ormax = *std::max_element(dev_t.begin(), dev_t.end());
   json << "{" << std::endl
        << "  \"precision\": " << singledouble << "," << std::endl
        << "  \"numevents\": " << nevt << "," << std::endl
@@ -21,17 +25,18 @@ void make_json(const std::vector<float> &cublas_t,
        << "  \"numblocks\": " << blocks << "," << std::endl
        << "  \"numthreads\": " << threads << "," << std::endl
        << "  \"cublas\": {" << std::endl
-       << "    \"avg\": " << std::reduce(cublas_t.begin(), cublas_t.end(), 0.0) / cublas_t.size() << "," << std::endl
-       << "    \"min\": " << *std::min_element(cublas_t.begin(), cublas_t.end()) << "," << std::endl
-       << "    \"max\": " << *std::max_element(cublas_t.begin(), cublas_t.end()) << std::endl
+       << "    \"avg\": " << cuavg << "," << std::endl
+       << "    \"min\": " << cumin << "," << std::endl
+       << "    \"max\": " << cumax << std::endl
        << "  }," << std::endl
        << "  \"device\": {" << std::endl
-       << "    \"avg\": " << std::reduce(device_t.begin(), device_t.end(), 0.0) / device_t.size() << "," << std::endl
-       << "    \"min\": " << *std::min_element(device_t.begin(), device_t.end()) << "," << std::endl
-       << "    \"max\": " << *std::max_element(device_t.begin(), device_t.end()) << std::endl
+       << "    \"avg\": " << oravg << "," << std::endl
+       << "    \"min\": " << ormin << "," << std::endl
+       << "    \"max\": " << ormax << std::endl
        << "  }" << std::endl
        << "}" << std::endl;
-  // clang-format on
+  json.close();
+  std::cout << std::endl << "factor: " << oravg / cuavg << std::endl;
 }
 
 #endif // HELPERS_H
