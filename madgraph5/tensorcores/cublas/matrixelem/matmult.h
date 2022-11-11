@@ -44,8 +44,8 @@ __global__ void mult_native_device(const TTYPE *cf, const CTYPE *jamp,
 //
 // kernel to set the pointers to arrays
 //
-__global__ void setMem(const CTYPE *d_B, CTYPE *d_C, TTYPE *d_y,
-                       const CTYPE **d_BB, CTYPE **d_CC, TTYPE **d_yy, int ncol,
+__global__ void setMem(const CTYPE *d_B, CTYPE *d_C, CTYPE *d_y,
+                       const CTYPE **d_BB, CTYPE **d_CC, CTYPE **d_yy, int ncol,
                        int nevt) {
   for (int i = 0; i < nevt; ++i) {
     d_BB[i] = &d_B[i * ncol];
@@ -58,8 +58,8 @@ __global__ void setMem(const CTYPE *d_B, CTYPE *d_C, TTYPE *d_y,
 // cublas implementation
 //
 void mult_cublas(cublasHandle_t handle, const CTYPE *d_A, const CTYPE *d_B,
-                 CTYPE *d_C, TTYPE *d_y, const CTYPE *d_BB, CTYPE *d_CC,
-                 TTYPE *d_yy, int dsize, float &time, int ncol, int nevt) {
+                 CTYPE *d_C, CTYPE *d_y, const CTYPE *d_BB, CTYPE *d_CC,
+                 CTYPE *d_yy, int dsize, float &time, int ncol, int nevt) {
 
   cublasSideMode_t side = CUBLAS_SIDE_LEFT;
   cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
