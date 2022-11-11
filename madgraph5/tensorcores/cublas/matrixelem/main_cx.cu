@@ -1,5 +1,6 @@
 #define DOUBLEPRECISION
 #define USE_NVTX
+#define TWOGS
 
 #include <algorithm>
 #include <complex>
@@ -19,10 +20,21 @@
 #include "matmult.h"
 #include "timer.h"
 
+#if defined(TWOGS)
 #include "data.h"
-//#include "data_3g.h"
+#else
+#include "data_3g.h"
+#endif // TWOGS
 
 using namespace mgOnGpu;
+
+//
+// usage
+//
+void usage() {
+  std::cout << "./main #threads/block #blocks/grid" << std::endl;
+  exit(1);
+}
 
 //
 // main
@@ -57,16 +69,18 @@ int main(int argc, char **argv) {
   // prepare memory
   //
   PUSH_RANGE("0 - cuda malloc memory", 0)
-  cuCheck(cudaMalloc((void **)&d_A, msize));        // color matrix
-  cuCheck(cudaMalloc((void **)&d_B, vsize * nevt)); // jamps
-  cuCheck(cudaMalloc((void **)&d_C, vsize * nevt)); // temp result
-  cuCheck(cudaMalloc((void **)&d_y, dsize * nevt)); // matrix elements
-
+  cuCheck(cudaMalloc((void **)&d_A, msize));         // color matrix
+  cuCheck(cudaMalloc((void **)&d_B, vsize * nevt));  // jamps
+  cuCheck(cudaMalloc((void **)&d_C, vsize * nevt));  // temp result
+  cuCheck(cudaMalloc((void **)&d_y, dsize * nevt));  // matrix elements
   cuCheck(cudaMalloc((void **)&d_BB, psize * nevt)); // batch gemv
   cuCheck(cudaMalloc((void **)&d_CC, psize * nevt)); // batch gemv
   cuCheck(cudaMalloc((void **)&d_yy, psize * nevt)); // batch gemv
   POP_RANGE
 
+  //
+  // mem copies
+  //
   PUSH_RANGE("1 - copy memory", 1)
   memcpy((void *)h_A, &cf[0], msize);
   for (int i = 0; i < ncol * ncol; ++i) {
@@ -82,7 +96,6 @@ int main(int argc, char **argv) {
     memcpy((void *)&h_B[i * ncol], &jamp0[0], vsize);
   }
   cuCheck(cudaMemcpy((void *)d_B, h_B, vsize * nevt, cudaMemcpyHostToDevice));
-
   POP_RANGE
 
   //
@@ -154,6 +167,9 @@ int main(int argc, char **argv) {
               << std::setw(13) << *h_y << time << std::endl;
   }
 
+  //
+  // create json data
+  //
   make_json(cublas_t, device_t, ncol, nevt, threads, blocks);
 
   return 0;
