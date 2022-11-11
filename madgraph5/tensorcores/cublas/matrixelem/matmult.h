@@ -57,7 +57,7 @@ __global__ void setMem(const CTYPE *d_B, CTYPE *d_C, TTYPE *d_y,
 //
 // cublas implementation
 //
-void mult_cublas(cublasHandle_t handle, const TTYPE *d_A, const CTYPE *d_B,
+void mult_cublas(cublasHandle_t handle, const CTYPE *d_A, const CTYPE *d_B,
                  CTYPE *d_C, TTYPE *d_y, const CTYPE *d_BB, CTYPE *d_CC,
                  TTYPE *d_yy, int dsize, float &time, int ncol, int nevt) {
 
