@@ -1,6 +1,6 @@
 #define DOUBLEPRECISION
 #define USE_NVTX
-#define TWOGS
+#define THREEGS
 
 #include <algorithm>
 #include <complex>
@@ -20,11 +20,11 @@
 #include "matmult.h"
 #include "timer.h"
 
-#if defined(TWOGS)
-#include "data.h"
-#else
+#if defined(THREEGS)
 #include "data_3g.h"
-#endif // TWOGS
+#else
+#include "data.h"
+#endif // THREEGS
 
 using namespace mgOnGpu;
 
@@ -53,16 +53,16 @@ int main(int argc, char **argv) {
   float time = 0.;
 
   int psize = sizeof(TTYPE *), dsize = sizeof(TTYPE), csize = sizeof(CTYPE),
-      vsize = csize * ncol, msizes = dsize * ncol * ncol,
-      msizec = vsize * ncol * ncol, niter = 10;
+      vsizes = dsize * ncol, vsizec = csize * ncol, vsizep = psize * ncol,
+      msizes = vsizes * ncol, msizec = vsizec * ncol, niter = 10;
   // prev: msize = dsize * ncol * ncol
-  TTYPE *h_As = (TTYPE *)malloc(msizes),    // color matrix in scalar
-      *h_y = (TTYPE *)malloc(dsize * nevt), // matrix elements
-      *d_As, *d_y, *d_yy, me = 0;
-  CTYPE *h_Ac = (CTYPE *)malloc(msizec),    // color matrix in complex
-      *h_B = (CTYPE *)malloc(vsize * nevt), // jamps
-      *d_Ac, *d_C, *d_CC,                   // intermeditate results
-      *d_B, *d_BB;
+  TTYPE *h_As = (TTYPE *)malloc(msizes),      // color matrix in scalar
+      *h_ys = (TTYPE *)malloc(vsizes * nevt), // matrix elements
+      *d_As, *d_ys, me = 0;
+  CTYPE *h_Ac = (CTYPE *)malloc(msizec),          // color matrix in complex
+      *h_B = (CTYPE *)malloc(vsizec * nevt),      // jamps
+          *h_yc = (CTYPE *)malloc(vsizec * nevt), // matrix elements
+      *d_Ac, *d_B, *d_BB, *d_C, *d_CC, *d_yc, *d_yyc;
   std::vector<float> cublas_t, device_t;
 
   std::cout << "i version     result       duration" << std::endl
@@ -72,14 +72,15 @@ int main(int argc, char **argv) {
   // prepare memory
   //
   PUSH_RANGE("0 - cuda malloc memory", 0)
-  cuCheck(cudaMalloc((void **)&d_Ac, msizec));       // color matrix complex
-  cuCheck(cudaMalloc((void **)&d_As, msizes));       // color matrix scalar
-  cuCheck(cudaMalloc((void **)&d_B, vsize * nevt));  // jamps
-  cuCheck(cudaMalloc((void **)&d_C, vsize * nevt));  // temp result
-  cuCheck(cudaMalloc((void **)&d_y, dsize * nevt));  // matrix elements
-  cuCheck(cudaMalloc((void **)&d_BB, psize * nevt)); // batch gemv
-  cuCheck(cudaMalloc((void **)&d_CC, psize * nevt)); // batch gemv
-  cuCheck(cudaMalloc((void **)&d_yy, psize * nevt)); // batch gemv
+  cuCheck(cudaMalloc((void **)&d_Ac, msizec));        // color matrix complex
+  cuCheck(cudaMalloc((void **)&d_As, msizes));        // color matrix scalar
+  cuCheck(cudaMalloc((void **)&d_B, vsizec * nevt));  // jamps
+  cuCheck(cudaMalloc((void **)&d_C, vsizec * nevt));  // temp result
+  cuCheck(cudaMalloc((void **)&d_yc, vsizec * nevt)); // matrix elements complex
+  cuCheck(cudaMalloc((void **)&d_ys, vsizes * nevt)); // matrix elements scalar
+  cuCheck(cudaMalloc((void **)&d_BB, vsizep * nevt)); // batch gemv
+  cuCheck(cudaMalloc((void **)&d_CC, vsizep * nevt)); // batch gemv
+  cuCheck(cudaMalloc((void **)&d_yyc, vsizep * nevt)); // batch gemv
   POP_RANGE
 
   //
@@ -98,9 +99,9 @@ int main(int argc, char **argv) {
     jamp0[i] = CX_MK(jamp0r[i], jamp0i[i]);
   }
   for (int i = 0; i < nevt; ++i) {
-    memcpy((void *)&h_B[i * ncol], &jamp0[0], vsize);
+    memcpy((void *)&h_B[i * ncol], &jamp0[0], vsizec);
   }
-  cuCheck(cudaMemcpy((void *)d_B, h_B, vsize * nevt, cudaMemcpyHostToDevice));
+  cuCheck(cudaMemcpy((void *)d_B, h_B, vsizec * nevt, cudaMemcpyHostToDevice));
   POP_RANGE
 
   //
@@ -113,26 +114,27 @@ int main(int argc, char **argv) {
   // or - deprecated - CUBLAS_TENSOR_OP_MATH);
   cubCheck(cublasSetAtomicsMode(handle, CUBLAS_ATOMICS_ALLOWED));
 
-  setMem<<<1, 1>>>(d_B, d_C, d_y, (const CTYPE **)d_BB, (CTYPE **)d_CC,
-                   (TTYPE **)d_yy, ncol, nevt);
+  setMem<<<1, 1>>>(d_B, d_C, d_yc, (const CTYPE **)d_BB, (CTYPE **)d_CC,
+                   (CTYPE **)d_yyc, ncol, nevt);
   POP_RANGE
 
   for (int i = 0; i < niter; ++i) {
     me = 0.;
     time = 0.;
     t.Start();
-    mult_cublas(handle, d_Ac, d_B, d_C, d_y, d_BB, d_CC, d_yy, dsize, time,
-                ncol, nevt);
-    time += t.GetDuration();
-    cuCheck(cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost));
-    me += h_y[0];
-    t.Start();
-    mult_cublas(handle, d_Ac, d_B, d_C, d_y, d_BB, d_CC, d_yy, dsize, time,
+    mult_cublas(handle, d_Ac, d_B, d_C, d_yc, d_BB, d_CC, d_yyc, dsize, time,
                 ncol, nevt);
     cudaDeviceSynchronize();
-    time += t.GetDuration();
-    cuCheck(cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost));
-    me += h_y[0];
+    time = t.GetDuration();
+    cuCheck(cudaMemcpy(h_yc, d_yc, dsize * nevt, cudaMemcpyDeviceToHost));
+    me = CX_REAL(h_yc[0]) + CX_IMAG(h_yc[0]);
+    // t.Start();
+    // mult_cublas(handle, d_Ac, d_B, d_C, d_y, d_BB, d_CC, d_yy, dsize, time,
+    //             ncol, nevt);
+    // cudaDeviceSynchronize();
+    // time += t.GetDuration();
+    // cuCheck(cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost));
+    // me += h_y[0];
     cublas_t.push_back(time);
     std::cout << std::left << std::setw(2) << i << std::setw(12) << "cublas"
               << std::setw(13) << me << time << std::endl;
@@ -162,14 +164,14 @@ int main(int argc, char **argv) {
     time = 0.;
     t.Start();
     PUSH_RANGE("4 - compute org on device", 4)
-    mult_native_device<<<blocks, threads>>>(d_As, d_B, d_y, ncol);
+    mult_native_device<<<blocks, threads>>>(d_As, d_B, d_ys, ncol);
     POP_RANGE
     cudaDeviceSynchronize();
     time = t.GetDuration();
-    cuCheck(cudaMemcpy(h_y, d_y, dsize * nevt, cudaMemcpyDeviceToHost));
+    cuCheck(cudaMemcpy(h_ys, d_ys, dsize * nevt, cudaMemcpyDeviceToHost));
     device_t.push_back(time);
     std::cout << std::left << std::setw(2) << i << std::setw(12) << "org device"
-              << std::setw(13) << *h_y << time << std::endl;
+              << std::setw(13) << me << time << std::endl;
   }
 
   //
