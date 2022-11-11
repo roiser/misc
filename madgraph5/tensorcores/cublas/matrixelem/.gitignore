@@ -2,3 +2,4 @@ nsys
 report.*
 prof/
 nsys/
+*.json
