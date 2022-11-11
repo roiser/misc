@@ -8,7 +8,7 @@ HEADERS = $(INCDIR)/dev_array.h data.h data_3g.h gpu_common.h helpers.h \
 NVCC = nvcc
 CFLAGS = $(ARCH) -I $(INCDIR) -lcublas -lnvToolsExt
 
-all: main_cx
+all: main_cx main
 cx: main_cx
 sc: main
 
