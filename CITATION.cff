@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Roiser
+    given-names: Stefan
+    orcid: https://orcid.org/0000-0002-5600-8592
+title: "My miscellaneous software repo"
+version: 0.0.1
+doi: none
+date-released: 2022-05-01
