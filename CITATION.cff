@@ -6,11 +6,10 @@ authors:
   - family-names: Roiser
     given-names: Stefan
     orcid: https://orcid.org/0000-0002-5600-8592
-  - name: "CERN"
-  - family-names: Duck
-    given-names: Donald
-  - family-names: Mouse
-    given-names: Mickey
+  - family-names: Stallmann
+    given-names: Richard
+  - family-names: Stroustrup
+    given-names: Bjarne
 version: 0.0.1
 doi: none
 license: "Some license"
