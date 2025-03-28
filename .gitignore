@@ -15,3 +15,5 @@ run_*_results.dat
 **/Events/*
 **/SubProcesses/P*/G[0-9]*
 **/test/ref/dump*
+
+PROC_*
