@@ -128,6 +128,12 @@ namespace mg5amcCpu
 #endif
     }
 
+    static __host__ __device__ inline fptype_sv*
+    kernelAccessP ( fptype* buffer )
+    {
+      return reinterpret_cast<fptype_sv*>( buffer );
+    }
+
     // Locate a field (output) in a memory buffer (input) from a kernel event-indexing mechanism (internal) and the given field indexes (input)
     // [Signature (const, SCALAR) ===> const fptype& kernelAccessConst( const fptype* buffer ) <===]
     static constexpr auto kernelAccessConst_s =

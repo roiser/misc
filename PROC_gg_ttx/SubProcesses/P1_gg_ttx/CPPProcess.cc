@@ -305,7 +305,7 @@ namespace mg5amcCpu
         COUPs[ndcoup + iicoup] = allCOUPs[ndcoup + iicoup]; // independent couplings, fixed for all events
       fptype* MEs = E_ACCESS::ieventAccessRecord( allMEs, ievt0 );
 #ifdef MGONGPU_SUPPORTS_MULTICHANNEL
-      fptype* numerators = NUM_ACCESS::ieventAccessRecord( allNumerators, ievt0 );
+      fptype* numerators = NUM_ACCESS::ieventAccessRecord( allNumerators, ievt0 ); // sr
       fptype* denominators = DEN_ACCESS::ieventAccessRecord( allDenominators, ievt0 );
 #endif
 #endif
@@ -315,7 +315,7 @@ namespace mg5amcCpu
 
 #ifdef MGONGPU_SUPPORTS_MULTICHANNEL
       // Numerators and denominators for the current event (CUDA) or SIMD event page (C++)
-      fptype_sv& numerators_sv = NUM_ACCESS::kernelAccess( numerators );
+      fptype_sv* numerators_sv = NUM_ACCESS::kernelAccessP( numerators );
       fptype_sv& denominators_sv = DEN_ACCESS::kernelAccess( denominators );
 #endif
 
@@ -335,7 +335,7 @@ namespace mg5amcCpu
       // Amplitude(s) for diagram number 1
       FFV1_0<W_ACCESS, A_ACCESS, CD_ACCESS>( w_fp[3], w_fp[2], w_fp[4], COUPs[1], 1.0, &amp_fp[0] );
 #ifdef MGONGPU_SUPPORTS_MULTICHANNEL
-      if( channelId == 1 ) numerators_sv += cxabs2( amp_sv[0] );
+      if( channelId == 1 ) numerators_sv[0] += cxabs2( amp_sv[0] );
       if( channelId != 0 ) denominators_sv += cxabs2( amp_sv[0] );
 #endif
       jamp_sv[0] += cxtype( 0, 1 ) * amp_sv[0];
@@ -349,7 +349,7 @@ namespace mg5amcCpu
       // Amplitude(s) for diagram number 2
       FFV1_0<W_ACCESS, A_ACCESS, CD_ACCESS>( w_fp[3], w_fp[4], w_fp[1], COUPs[1], 1.0, &amp_fp[0] );
 #ifdef MGONGPU_SUPPORTS_MULTICHANNEL
-      if( channelId == 2 ) numerators_sv += cxabs2( amp_sv[0] );
+      if( channelId == 2 ) numerators_sv[1] += cxabs2( amp_sv[0] );
       if( channelId != 0 ) denominators_sv += cxabs2( amp_sv[0] );
 #endif
       jamp_sv[0] -= amp_sv[0];
@@ -362,7 +362,7 @@ namespace mg5amcCpu
       // Amplitude(s) for diagram number 3
       FFV1_0<W_ACCESS, A_ACCESS, CD_ACCESS>( w_fp[4], w_fp[2], w_fp[1], COUPs[1], 1.0, &amp_fp[0] );
 #ifdef MGONGPU_SUPPORTS_MULTICHANNEL
-      if( channelId == 3 ) numerators_sv += cxabs2( amp_sv[0] );
+      if( channelId == 3 ) numerators_sv[2] += cxabs2( amp_sv[0] );
       if( channelId != 0 ) denominators_sv += cxabs2( amp_sv[0] );
 #endif
       jamp_sv[1] -= amp_sv[0];
@@ -960,9 +960,10 @@ namespace mg5amcCpu
 #ifdef MGONGPU_SUPPORTS_MULTICHANNEL
       fptype* numerators = NUM_ACCESS::ieventAccessRecord( allNumerators, ievt0 );
       fptype* denominators = DEN_ACCESS::ieventAccessRecord( allDenominators, ievt0 );
-      fptype_sv& numerators_sv = NUM_ACCESS::kernelAccess( numerators );
+      fptype_sv* numerators_sv = NUM_ACCESS::kernelAccessP( numerators );
       fptype_sv& denominators_sv = DEN_ACCESS::kernelAccess( denominators );
-      numerators_sv = fptype_sv{ 0 };
+      for (int i = 0; i < 3; ++i)
+        numerators_sv[i] = fptype_sv{ 0 };
       denominators_sv = fptype_sv{ 0 };
 #endif
     }
@@ -1306,9 +1307,9 @@ namespace mg5amcCpu
       {
         fptype* numerators = NUM_ACCESS::ieventAccessRecord( allNumerators, ievt0 );
         fptype* denominators = DEN_ACCESS::ieventAccessRecord( allDenominators, ievt0 );
-        fptype_sv& numerators_sv = NUM_ACCESS::kernelAccess( numerators );
+        fptype_sv* numerators_sv = NUM_ACCESS::kernelAccessP( numerators );
         fptype_sv& denominators_sv = DEN_ACCESS::kernelAccess( denominators );
-        MEs_sv *= numerators_sv / denominators_sv;
+        MEs_sv *= numerators_sv[0] / denominators_sv; // sr needs become channelId
       }
 #endif
       //for( int ieppV = 0; ieppV < neppV; ieppV++ )
