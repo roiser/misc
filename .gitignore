@@ -1,0 +1,17 @@
+*.so
+*.a
+*.o
+*.pyc
+
+.build*
+.cudacpplibs
+.libs
+
+madevent.tar.gz
+run_*.tar.gz
+run_*_results.dat
+
+**/HTML/*
+**/Events/*
+**/SubProcesses/P*/G[0-9]*
+**/test/ref/dump*
