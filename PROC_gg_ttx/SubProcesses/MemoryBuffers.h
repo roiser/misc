@@ -274,7 +274,7 @@ namespace mg5amcCpu
   typedef BufferBase<fptype> BufferNumerators;
 
   // The size (number of elements) per event in a memory buffer for numerators
-  constexpr size_t sizePerEventNumerators = 3;
+  constexpr size_t sizePerEventNumerators = 1;
 
 #ifndef MGONGPUCPP_GPUIMPL
   // A class encapsulating a C++ host buffer for gs
