@@ -104,6 +104,7 @@ namespace mg5amcCpu
   inline unsigned int getChannelId(const unsigned int* allChannelIds
 #ifndef MGONGPUCPP_GPUIMPL
                                   , const int ievt00
+                                  , bool sanityCheckMixedPrecision = true
 #endif
   ) {
 
@@ -145,16 +146,19 @@ namespace mg5amcCpu
       }
 #endif
       assert( channelId > 0 ); // SANITY CHECK: scalar channelId must be > 0 if multichannel is enabled (allChannelIds != nullptr)
-#if defined MGONGPU_CPPSIMD and defined MGONGPU_FPTYPE_DOUBLE and defined MGONGPU_FPTYPE2_FLOAT
-      // Second neppV page of channels (iParity=1 => ievt0 = ievt00 + 1 * neppV)
-      const unsigned int* channelIds2 = CID_ACCESS::ieventAccessRecordConst( allChannelIds, ievt00 + neppV ); // fix bug #899/#911
-      uint_v channelIds2_v = CID_ACCESS::kernelAccessConst( channelIds2 );                                    // fix #895 (compute this only once for all diagrams)
-      // **NB! in "mixed" precision, using SIMD, calculate_wavefunctions computes MEs for TWO neppV pages with a single channelId! #924
-      for( int i = 0; i < neppV; ++i )
+      if( sanityCheckMixedPrecision )
       {
-        assert( channelId == channelIds2_v[i] ); // SANITY CHECKS #898 #924: all events in the 2nd SIMD vector have the same channelId as that of the 1st SIMD vector
+        #if defined MGONGPU_CPPSIMD and defined MGONGPU_FPTYPE_DOUBLE and defined MGONGPU_FPTYPE2_FLOAT
+        // Second neppV page of channels (iParity=1 => ievt0 = ievt00 + 1 * neppV)
+        const unsigned int* channelIds2 = CID_ACCESS::ieventAccessRecordConst( allChannelIds, ievt00 + neppV ); // fix bug #899/#911
+        uint_v channelIds2_v = CID_ACCESS::kernelAccessConst( channelIds2 );                                    // fix #895 (compute this only once for all diagrams)
+        // **NB! in "mixed" precision, using SIMD, calculate_wavefunctions computes MEs for TWO neppV pages with a single channelId! #924
+        for( int i = 0; i < neppV; ++i )
+        {
+          assert( channelId == channelIds2_v[i] ); // SANITY CHECKS #898 #924: all events in the 2nd SIMD vector have the same channelId as that of the 1st SIMD vector
+        }
+  #endif
       }
-#endif
     }
 
 #endif // MGONGPUCPP_GPUIMPL
@@ -1333,11 +1337,12 @@ namespace mg5amcCpu
 #ifdef MGONGPU_SUPPORTS_MULTICHANNEL
       if( allChannelIds != nullptr ) // fix segfault #892 (not 'channelIds[0] != 0')
       {
+        const unsigned int channelId = getChannelId(allChannelIds, ievt0, false);
         fptype* numerators = NUM_ACCESS::ieventAccessRecord( allNumerators, ievt0 );
         fptype* denominators = DEN_ACCESS::ieventAccessRecord( allDenominators, ievt0 );
         fptype_sv* numerators_sv = NUM_ACCESS::kernelAccessP( numerators );
         fptype_sv& denominators_sv = DEN_ACCESS::kernelAccess( denominators );
-        MEs_sv *= numerators_sv[0] / denominators_sv; // sr needs become channelId
+        MEs_sv *= numerators_sv[channelId] / denominators_sv; 
       }
 #endif
       //for( int ieppV = 0; ieppV < neppV; ieppV++ )
